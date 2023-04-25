@@ -1,0 +1,25 @@
+$molecule
+0 1
+H 0.0 0.0 0.0
+H 1.40 0.0 0.0
+$end
+
+$rem
+input_bohr true
+method hf
+basis 6-311g
+
+MAX_SCF_CYCLES 50
+THRESH  14
+SCF_CONVERGENCE  6
+
+SYM_IGNORE true
+SYMMETRY FALSE
+
+IPRINT 4
+SCF_FINAL_PRINT 4
+SCF_PRINT 4
+ham_debug_print = 4
+print_xc_time 4
+PRINT_SCF_TIME 4
+$end
