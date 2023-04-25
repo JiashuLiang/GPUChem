@@ -1,7 +1,7 @@
 # GPUChem
 A Quantum Chemistry package to run on GPU
 
-To compile on NERSC, first install armadillo and then download the package
+To compile on NERSC, first install armadillo (remeber to add to PATH) and then download the package
 ```
 git clone git@github.com:JiashuLiang/GPUChem.git
 ```
@@ -15,6 +15,7 @@ ARMADILLO_DIR=${ARMADILLO_INSTALL_PATH} cmake -DCMAKE_BUILD_TYPE=Debug  -DCMAKE_
 
 If you are in mp54 project, you can use the armadillo downloaded by me 
 ```
+export PATH=/global/cfs/cdirs/mp54/armadillo-12.2.0/build:$PATH
 ARMADILLO_DIR=/global/cfs/cdirs/mp54/armadillo-12.2.0/build  cmake -DCMAKE_BUILD_TYPE=Debug  -DCMAKE_CXX_COMPILER=CC ..
 ```
 Then make the tests
