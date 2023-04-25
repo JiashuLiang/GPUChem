@@ -53,6 +53,11 @@ int eval_Hcoremat(Molecule_basis& system, arma::mat &H_mat){
     construct_T(T_mat, sorted_AOs, p_start_ind);
     
     H_mat = T_mat + V_mat;
+
+    std::cout << "Printing T mat "<<std::endl;
+    T_mat.print();
+    std::cout << "Printing V mat "<<std::endl;
+    V_mat.print();
     // return H_mat to its original order.
     H_mat = H_mat(undo_sorted_indices, undo_sorted_indices);
 
@@ -159,11 +164,11 @@ void construct_V(arma::mat &Vmat, std::vector<AO> &mAOs, size_t p_start_ind, con
 
 }
 void construct_T(arma::mat &Tmat, std::vector<AO> &mAOs, size_t p_start_ind){
-    for (size_t mu = 0; mu < Tmat.n_rows; mu++){
-        for (size_t nu = 0; nu < Tmat.n_cols; nu++){
-            Tmat(mu,nu) = eval_Tmunu(mAOs[mu], mAOs[nu]);
-        }
-    }
+    // for (size_t mu = 0; mu < Tmat.n_rows; mu++){
+    //     for (size_t nu = 0; nu < Tmat.n_cols; nu++){
+    //         Tmat(mu,nu) = eval_Tmunu(mAOs[mu], mAOs[nu]);
+    //     }
+    // }
 
     // Handle ss, then sp, then pp.
     // Might be inefficient for small s_orbs.size() and p_orbs.size()
@@ -447,7 +452,7 @@ double overlap(arma::vec A,  int l1, int m1, int n1,double alpha, arma::vec B, i
 double kinetic(arma::vec A,int l1, int m1, int n1,double alpha, arma::vec B, int l2, int m2, int n2, double beta){
     // Formulation from JPS (21) 11, Nov 1966 by H Taketa et. al
 
-    double term0 = beta*(2*(l2+m2+n2)+3)*overlap(A,l1,m1,n1,alpha,B,beta,l2,m2,n2);
+    double term0 = beta*(2*(l2+m2+n2)+3)*overlap(A,l1,m1,n1,alpha,B,l2,m2,n2,beta);
 
     double term1 = -2*pow(beta,2)*(overlap(A,l1,m1,n1,alpha, B,l2+2,m2,n2,beta) +\
                             overlap(A,l1,m1,n1,alpha, B,l2,m2+2,n2,beta) +\
