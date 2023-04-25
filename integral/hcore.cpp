@@ -279,8 +279,8 @@ double eval_Vmunu(AO &mu, AO &nu, const Molecule &mol){
     int l2 = nu.lmn(0);
     int m2 = nu.lmn(1);
     int n2 = nu.lmn(2);
-    arma::vec & A = mu.R0;
-    arma::vec & B = nu.R0;
+    arma::vec A = mu.R0;
+    arma::vec B = nu.R0;
 
     for (size_t c = 0; c < mol.mAtoms.size(); c++){
         arma::vec C = mol.mAtoms[c].m_coord; // coordinates of the atom
@@ -445,7 +445,7 @@ double overlap(arma::vec A,  int l1, int m1, int n1,double alpha, arma::vec B, i
     double gamma = alpha + beta;
     arma::vec P = gaussian_product_center(alpha, A, beta, B);
 
-    double prefactor = pow(M_PI/gamma,1.5) * exp(-alpha * beta * arma::norm(A-B)/gamma);
+    double prefactor = pow(M_PI/gamma,1.5) * exp(-alpha * beta * pow(arma::norm(A-B),2)/gamma);
 
     double sx = overlap_1d(l1,l2,P(0)-A(0),P(0)-B(0),gamma);
     double sy = overlap_1d(m1,m2,P(1)-A(1),P(1)-B(1),gamma);
@@ -493,14 +493,14 @@ arma::vec A_tensor(int l1, int l2, double PA, double PB, double CP, double g){
     return A;
 
 }
-double nuclear_attraction(arma::vec A,int l1, int m1, int n1,double alpha, arma::vec B, int l2, int m2, int n2,double beta, arma::vec C){
+double nuclear_attraction(arma::vec &A,int l1, int m1, int n1,double alpha, arma::vec &B, int l2, int m2, int n2,double beta, arma::vec &C){
     // Formulation from JPS (21) 11, Nov 1966 by H Taketa et. al
     
     double gamma = alpha + beta;
 
     arma::vec P = gaussian_product_center(alpha,A,beta,B);
-    double rab2 = arma::norm(A-B);
-    double rcp2 = arma::norm(C-P);
+    double rab2 = pow(arma::norm(A-B),2);
+    double rcp2 = pow(arma::norm(C-P),2);
 
     arma::vec dPA = P-A;
     arma::vec dPB = P-B;

@@ -42,7 +42,7 @@ double Fgamma(int m, double x);
 // Nuclear attraction functions
 double A_term(int i, int r, int u, int l1, int l2,double PAx, double PBx, double CPx, double gamma);
 arma::vec A_tensor(int l1, int l2, double PA, double PB, double CP, double g);
-double nuclear_attraction(arma::vec A,int l1, int m1, int n1,double alpha, arma::vec B, int l2, int m2, int n2,double beta, arma::vec C);
+double nuclear_attraction(arma::vec &A,int l1, int m1, int n1,double alpha, arma::vec &B, int l2, int m2, int n2,double beta, arma::vec &C);
 
 
 #endif // HCORE_H

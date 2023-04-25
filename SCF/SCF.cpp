@@ -54,6 +54,7 @@ int RSCF::init()
     std::cerr << "Warn! Overlap matrix evaluation is failed." << std::endl;
     return 1;
   }
+  S_mat.print("S_mat");
   // Calculate X_mat = S_mat^(-1/2)
   arma::vec S_eigval;
   // Use H_core as a temporary matrix to store eigenvectors
