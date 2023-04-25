@@ -384,23 +384,27 @@ void gcf(double *gammcf, double a, double x, double *gln){
 
 double gammp(double a, double x){
     // Returns the incomplete gamma function P (a, x). From Numerical Recipes, section 6.1 and 6.2
-    double gamser,gammcf,gln;
+    double gam, gamc, gln;
     if (x < 0.0 || a <= 0.0) throw std::runtime_error("Invalid arguments in routine gammp");
 
     if (x < (a+1.0)) {// Use the series representation.
-        gser(&gamser,a,x,&gln);
-        return gamser;
+        gser(&gam,a,x,&gln);
     } else { //Use the continued fraction representation
-        gcf(&gammcf,a,x,&gln);
-        return 1.0-gammcf; //and take its complement.
+        gcf(&gamc,a,x,&gln);
+        gam = 1-gamc;
+        
     }
+    return exp(gln)*gam;
 }
 
 double Fgamma(int m, double x){
     // Incomplete Gamma Function
     double SMALL=1e-12;
+    double m_d = (double) m; // convert to double explicitly, prolly notneeded
     x = max(x,SMALL);
-    return 0.5*pow(x,-m-0.5)*gammp(m+0.5,x);
+    // std::cout<<"-m_d-0.5 --" <<(-m_d-0.5)<<std::endl;
+    // std::cout<<"-m-0.5 --" <<(-m-0.5)<<std::endl;
+    return 0.5*pow(x,-m_d-0.5)*gammp(m_d+0.5,x);
 }
 
 int factorial (int n){
