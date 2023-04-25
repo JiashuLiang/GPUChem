@@ -146,11 +146,10 @@ void rysroot(arma::mat& rys_root, double& X, double& t1, double& t2, double& t3,
 	// if X > 30, use Hermite polynomial n = 6
 	if (X <= 30){
 		// read from table
-		int flr_index = std::floor(X / 0.01) + 1;
-		double flr_weight = (0.01 - (X - (flr_index - 1) * 0.01)) / 0.01;
+		int flr_index = std::floor(X / 0.01);
+		double flr_weight = (0.01 - (X - flr_index * 0.01)) / 0.01;
 		int cel_index = flr_index + 1;
-		// double cel_weight = (0.01 - ((cel_index - 1) * 0.01) - X) / 0.01;
-		double cel_weight = (0.01 - ((cel_index - 1) * 0.01) + X) / 0.01;
+		double cel_weight = (0.01 - (cel_index * 0.01) + X) / 0.01;
 
 		t1 = rys_root(flr_index, 0)*flr_weight + rys_root(cel_index, 0)*cel_weight;
 		t2 = rys_root(flr_index, 1)*flr_weight + rys_root(cel_index, 1)*cel_weight;
@@ -158,6 +157,7 @@ void rysroot(arma::mat& rys_root, double& X, double& t1, double& t2, double& t3,
 		w1 = rys_root(flr_index, 3)*flr_weight + rys_root(cel_index, 3)*cel_weight;
 		w2 = rys_root(flr_index, 4)*flr_weight + rys_root(cel_index, 4)*cel_weight;
 		w3 = rys_root(flr_index, 5)*flr_weight + rys_root(cel_index, 5)*cel_weight;
+		// std::cout << "flr_index, X, t1, w1 " << flr_index << " " << X << " " << t1 << " " << w1 << " " << std::endl;
 	} else { // X > 30
 		t1 = 0.436077412 * 0.436077412 / X;
 		t2 = 1.335849074 * 1.335849074 / X;
