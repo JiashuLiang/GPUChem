@@ -116,11 +116,14 @@ int RSCF::run()
 
 double RSCF::getEnergy()
 {
+  double E_two_ele = arma::dot(Pa, Ga);
+  double E_one_ele = arma::dot(Pa, H_core)* 2;
   Ee = arma::dot(Pa, Ga);
-  Ee += arma::dot(Pa, H_core)* 2;
   Etotal = Ee + En;
   std::cout << "Nuclear Repulsion Energy is " << En << " hartree." << std::endl;
-  std::cout << "Electron Energy is " << Ee << " hartree." << std::endl;
+  std::cout << "One Electron Energy is " << E_one_ele << " hartree." << std::endl;
+  std::cout << "Two electron Energy is " << E_two_ele << " hartree." << std::endl;
+  std::cout << "Total Electron Energy is " << Ee << " hartree." << std::endl;
   return Etotal;
 }
 
