@@ -34,11 +34,11 @@ int Basis_reading(std::string basis_name){
     return 0;
 }
 
-int Basis_reading(std::string fin, std::string fout, std::string  scratch){
+int Basis_reading(std::string fin, std::string fout){
     JobInfo MyJob;
     std::cout << "Input: " << fin << "\n";
 
-    if(MyJob.read_from_file(fin, fout, scratch))
+    if(MyJob.read_from_file(fin, fout))
       return 1;
 
     Molecule_basis MyMolBasis(MyJob.m_molecule);
@@ -54,7 +54,7 @@ int main(int argc, char *argv[])
 {
   return
     Basis_reading("sto3g")|
-    Basis_reading("H2.in", "H2.out", "/home/jsliang/Scratch")|
-    Basis_reading("C2H4.in", "C2H4.out", "/home/jsliang/Scratch")|
+    Basis_reading("H2.in", "H2.out")|
+    Basis_reading("C2H4.in", "C2H4.out")|
     0;
 }

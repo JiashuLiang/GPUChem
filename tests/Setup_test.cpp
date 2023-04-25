@@ -53,7 +53,6 @@ int TestFiles(std::string fin){
 int main(int argc, char *argv[])
 {
   return
-    TestFiles("H2.in", "H2.out", "/home/jsliang/Scratch")|
     TestFiles("C2H4.in", "CH2.out")|
     TestFiles("C2H4.in")|
     0;

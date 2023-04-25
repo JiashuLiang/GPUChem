@@ -1,4 +1,4 @@
-#include "JobInfo.h"
+#include "Jobinfo.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>

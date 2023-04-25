@@ -11,11 +11,11 @@
 using namespace std;
 
 
-int run_SCF(std::string fin, std::string fout, std::string  scratch){
+int run_SCF(std::string fin, std::string fout){
     JobInfo MyJob;
     std::cout << "Input: " << fin << "\n";
 
-    if(MyJob.read_from_file(fin, fout, scratch))
+    if(MyJob.read_from_file(fin, fout))
       return 1;
 
     Molecule_basis MyMolBasis(MyJob.m_molecule);
@@ -39,7 +39,7 @@ int run_SCF(std::string fin, std::string fout, std::string  scratch){
 int main(int argc, char *argv[])
 {
   return
-    run_SCF("H2.in", "H2.out", "/home/jsliang/Scratch")|
-    // run_SCF("C2H4.in", "C2H4.out", "/home/jsliang/Scratch")|
+    run_SCF("H2.in", "H2.out")|
+    // run_SCF("C2H4.in", "C2H4.out")|
     0;
 }

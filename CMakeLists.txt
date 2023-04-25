@@ -20,7 +20,7 @@ endif(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 
 # set(ARMADILLO_PATH "${CMAKE_CURRENT_SOURCE_DIR}/armadillo-12.2.0")
-find_package(Armadillo REQUIRED)
+find_package(Armadillo REQUIRED PATHS ${ARMADILLO_DIR})
 include_directories(${ARMADILLO_INCLUDE_DIRS})
 find_package(BLAS)
 find_package(LAPACK)
