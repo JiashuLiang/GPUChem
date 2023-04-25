@@ -1,2 +1,0 @@
-/usr/bin/ar qc libbasis.a CMakeFiles/basis.dir/AO.cpp.o CMakeFiles/basis.dir/util.cpp.o CMakeFiles/basis.dir/basis_set.cpp.o CMakeFiles/basis.dir/molecule_basis.cpp.o
-/usr/bin/ranlib libbasis.a
