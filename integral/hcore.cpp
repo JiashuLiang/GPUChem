@@ -53,6 +53,11 @@ int eval_Hcoremat(Molecule_basis& system, arma::mat &H_mat){
     construct_T(T_mat, sorted_AOs, p_start_ind);
     
     H_mat = T_mat + V_mat;
+
+    std::cout << "Printing T mat "<<std::endl;
+    T_mat.print();
+    std::cout << "Printing V mat "<<std::endl;
+    V_mat.print();
     // return H_mat to its original order.
     H_mat = H_mat(undo_sorted_indices, undo_sorted_indices);
 
@@ -159,11 +164,11 @@ void construct_V(arma::mat &Vmat, std::vector<AO> &mAOs, size_t p_start_ind, con
 
 }
 void construct_T(arma::mat &Tmat, std::vector<AO> &mAOs, size_t p_start_ind){
-    for (size_t mu = 0; mu < Tmat.n_rows; mu++){
-        for (size_t nu = 0; nu < Tmat.n_cols; nu++){
-            Tmat(mu,nu) = eval_Tmunu(mAOs[mu], mAOs[nu]);
-        }
-    }
+    // for (size_t mu = 0; mu < Tmat.n_rows; mu++){
+    //     for (size_t nu = 0; nu < Tmat.n_cols; nu++){
+    //         Tmat(mu,nu) = eval_Tmunu(mAOs[mu], mAOs[nu]);
+    //     }
+    // }
 
     // Handle ss, then sp, then pp.
     // Might be inefficient for small s_orbs.size() and p_orbs.size()
@@ -379,23 +384,27 @@ void gcf(double *gammcf, double a, double x, double *gln){
 
 double gammp(double a, double x){
     // Returns the incomplete gamma function P (a, x). From Numerical Recipes, section 6.1 and 6.2
-    double gamser,gammcf,gln;
+    double gam, gamc, gln;
     if (x < 0.0 || a <= 0.0) throw std::runtime_error("Invalid arguments in routine gammp");
 
     if (x < (a+1.0)) {// Use the series representation.
-        gser(&gamser,a,x,&gln);
-        return gamser;
+        gser(&gam,a,x,&gln);
     } else { //Use the continued fraction representation
-        gcf(&gammcf,a,x,&gln);
-        return 1.0-gammcf; //and take its complement.
+        gcf(&gamc,a,x,&gln);
+        gam = 1-gamc;
+        
     }
+    return exp(gln)*gam;
 }
 
 double Fgamma(int m, double x){
     // Incomplete Gamma Function
     double SMALL=1e-12;
+    double m_d = (double) m; // convert to double explicitly, prolly notneeded
     x = max(x,SMALL);
-    return 0.5*pow(x,-m-0.5)*gammp(m+0.5,x);
+    // std::cout<<"-m_d-0.5 --" <<(-m_d-0.5)<<std::endl;
+    // std::cout<<"-m-0.5 --" <<(-m-0.5)<<std::endl;
+    return 0.5*pow(x,-m_d-0.5)*gammp(m_d+0.5,x);
 }
 
 int factorial (int n){
@@ -447,7 +456,7 @@ double overlap(arma::vec A,  int l1, int m1, int n1,double alpha, arma::vec B, i
 double kinetic(arma::vec A,int l1, int m1, int n1,double alpha, arma::vec B, int l2, int m2, int n2, double beta){
     // Formulation from JPS (21) 11, Nov 1966 by H Taketa et. al
 
-    double term0 = beta*(2*(l2+m2+n2)+3)*overlap(A,l1,m1,n1,alpha,B,beta,l2,m2,n2);
+    double term0 = beta*(2*(l2+m2+n2)+3)*overlap(A,l1,m1,n1,alpha,B,l2,m2,n2,beta);
 
     double term1 = -2*pow(beta,2)*(overlap(A,l1,m1,n1,alpha, B,l2+2,m2,n2,beta) +\
                             overlap(A,l1,m1,n1,alpha, B,l2,m2+2,n2,beta) +\

@@ -149,7 +149,8 @@ void rysroot(arma::mat& rys_root, double& X, double& t1, double& t2, double& t3,
 		int flr_index = std::floor(X / 0.01) + 1;
 		double flr_weight = (0.01 - (X - (flr_index - 1) * 0.01)) / 0.01;
 		int cel_index = flr_index + 1;
-		double cel_weight = (0.01 - ((cel_index - 1) * 0.01) - X) / 0.01;
+		// double cel_weight = (0.01 - ((cel_index - 1) * 0.01) - X) / 0.01;
+		double cel_weight = (0.01 - ((cel_index - 1) * 0.01) + X) / 0.01;
 
 		t1 = rys_root(flr_index, 0)*flr_weight + rys_root(cel_index, 0)*cel_weight;
 		t2 = rys_root(flr_index, 1)*flr_weight + rys_root(cel_index, 1)*cel_weight;
