@@ -1,0 +1,2 @@
+/usr/bin/ar qc libsetup.a CMakeFiles/setup.dir/Jobinfo.cpp.o CMakeFiles/setup.dir/molecule.cpp.o
+/usr/bin/ranlib libsetup.a

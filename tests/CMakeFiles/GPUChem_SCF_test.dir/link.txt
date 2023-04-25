@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/GPUChem_SCF_test.dir/SCF_test.cpp.o -o GPUChem_SCF_test  ../Setup/libsetup.a ../basis/libbasis.a ../integral/libintegral.a ../SCF/libscf.a ../integral/libintegral.a ../basis/libbasis.a ../Setup/libsetup.a 
