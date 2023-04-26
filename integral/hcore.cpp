@@ -85,7 +85,7 @@ size_t sort_AOs(std::vector<AO> &unsorted_AOs, std::vector<AO> &sorted_AOs, arma
             throw std::runtime_error("Unsupported l_total");
         }
     }
-
+    assert(s_orbs.size() + p_orbs.size() == unsorted_AOs.size());
     s_orbs.insert(s_orbs.end(), p_orbs.begin(), p_orbs.end()); // append p_orbs to s_orbs
     s_orbs_ind.insert(s_orbs_ind.end(), p_orbs_ind.begin(), p_orbs_ind.end());
     
@@ -97,7 +97,7 @@ size_t sort_AOs(std::vector<AO> &unsorted_AOs, std::vector<AO> &sorted_AOs, arma
     }
     
     
-    assert(s_orbs.size() + p_orbs.size() == unsorted_AOs.size());
+    
 
     return s_orbs.size();
 }
