@@ -49,11 +49,11 @@ int eval_Hcoremat(Molecule_basis& system, arma::mat &H_mat){
     arma::uvec undo_sorted_indices = arma::sort_index(sorted_indices);
 
     // Perform construction of H, sorted into blocks of ss, sp, ps,pp
-    // construct_V(V_mat, sorted_AOs, p_start_ind, system.m_mol);
-    // construct_T(T_mat, sorted_AOs, p_start_ind);
+    construct_V(V_mat, sorted_AOs, p_start_ind, system.m_mol);
+    construct_T(T_mat, sorted_AOs, p_start_ind);
 
-    construct_V_unsorted(V_mat, system.mAOs, system.m_mol);
-    construct_T_unsorted(T_mat, system.mAOs);
+    // construct_V_unsorted(V_mat, system.mAOs, system.m_mol);
+    // construct_T_unsorted(T_mat, system.mAOs);
 
     
     
@@ -62,7 +62,7 @@ int eval_Hcoremat(Molecule_basis& system, arma::mat &H_mat){
     // T_mat.print("Printing T mat ");
     // V_mat.print("Printing V mat ");
     // return H_mat to its original order.
-    // H_mat = H_mat(undo_sorted_indices, undo_sorted_indices);
+    H_mat = H_mat(undo_sorted_indices, undo_sorted_indices);
 
     return 0;
 }
