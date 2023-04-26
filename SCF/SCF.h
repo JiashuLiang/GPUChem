@@ -21,20 +21,21 @@ class RSCF: public SCF{
     private:
         Molecule_basis &m_molbasis;
         int dim, num_atoms, max_iter;
-        double tol;
+        double tol, diff;
         arma::mat S_mat, X_mat;
         arma::mat Ga;
         arma::mat H_core;
         arma::mat Pa, Pa_ascol;
         arma::mat Ca;
         arma::vec Ea;
-        double Ee, En, Etotal;
+        double Ee, En, Etotal, E_one_ele, E_two_ele;
     public:
         RSCF(Molecule_basis &m_molbasis_i, int max_it, double tolerence);
         virtual int init();
         virtual int run();
         virtual double * getP_ptr();
         virtual double getEnergy();
+        void UpdateEnergy();
         virtual int getdim(){return dim;}
 };
 

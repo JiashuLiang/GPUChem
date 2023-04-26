@@ -54,7 +54,7 @@ int RSCF::init()
     std::cerr << "Warn! Overlap matrix evaluation is failed." << std::endl;
     return 1;
   }
-  S_mat.print("S_mat");
+  // S_mat.print("S_mat");
   // Calculate X_mat = S_mat^(-1/2)
   arma::vec S_eigval;
   // Use H_core as a temporary matrix to store eigenvectors
@@ -70,7 +70,7 @@ int RSCF::init()
   // Initial guess for Pa use Ca = I
   Ca.eye();
   Pa = Ca.cols(0, m_molbasis.num_alpha_ele - 1) * Ca.cols(0, m_molbasis.num_alpha_ele - 1).t();
-
+  diff = 1.;
   return 0;
 }
 
@@ -83,22 +83,25 @@ int RSCF::run()
   arma::mat Fa = H_core + Ga;
   arma::mat Pa_old;
   size_t k = 0;
+  std::cout << "Iteration start! "<< std::endl;
   for (; k < max_iter; k++)
   {
-    std::cout << "Iteration: " << k << std::endl;
-    Pa.print("Pa");
-    Ga.print("Ga");
-    Fa.print("Fa");
+    // Pa.print("Pa");
+    // Ga.print("Ga");
+    // Fa.print("Fa");
     Pa_old = Pa;
     Fa = X_mat.t() * Fa * X_mat; // Get Fa' = X_mat^(-1) * Fa * X_mat^(-1)
-    Fa.print("Fa'");
+    // Fa.print("Fa'");
     arma::eig_sym(Ea, Ca, Fa);  // Solve eigen equation Fa' * Ca' = Ea * Ca'
     // Ea.print("Ea");
     Ca = X_mat * Ca; // Get Ca = X_mat * Ca'
     Pa = Ca.cols(0, m_molbasis.num_alpha_ele - 1) * Ca.cols(0, m_molbasis.num_alpha_ele - 1).t();
     // std::cout << "after solving eigen equation: " << k << std::endl;
     // Ca.print("Ca");
-    if (arma::approx_equal(Pa, Pa_old, "absdiff", tol))
+      UpdateEnergy();
+      diff = arma::norm(Pa- Pa_old, "fro");
+      std::cout << "Iteration " << k << ": the difference fro norm is " << diff << ", Ee = " << Ee<< std::endl;
+    if (diff < tol)
       break;
     // Pa.print("Pa_new");
     eval_Gmat_RSCF(m_molbasis, Pa, Ga); // Get new Ga
@@ -113,13 +116,15 @@ int RSCF::run()
   Ca.print("Ca");
   return 0;
 }
+void RSCF::UpdateEnergy(){
+  E_two_ele = arma::dot(Pa, Ga);
+  E_one_ele = arma::dot(Pa, H_core)* 2;
+  Ee = E_two_ele + E_one_ele;
+  Etotal = Ee + En;
+}
 
 double RSCF::getEnergy()
 {
-  double E_two_ele = arma::dot(Pa, Ga);
-  double E_one_ele = arma::dot(Pa, H_core)* 2;
-  Ee = arma::dot(Pa, Ga);
-  Etotal = Ee + En;
   std::cout << "Nuclear Repulsion Energy is " << En << " hartree." << std::endl;
   std::cout << "One Electron Energy is " << E_one_ele << " hartree." << std::endl;
   std::cout << "Two electron Energy is " << E_two_ele << " hartree." << std::endl;
