@@ -49,9 +49,11 @@ int eval_Hcoremat(Molecule_basis& system, arma::mat &H_mat){
     arma::uvec undo_sorted_indices = arma::sort_index(sorted_indices);
 
     // Perform construction of H, sorted into blocks of ss, sp, ps,pp
-    construct_V(V_mat, sorted_AOs, p_start_ind, system.m_mol);
-    construct_T(T_mat, sorted_AOs, p_start_ind);
+    // construct_V(V_mat, sorted_AOs, p_start_ind, system.m_mol);
+    // construct_T(T_mat, sorted_AOs, p_start_ind);
 
+    construct_V_unsorted(V_mat, system.mAOs, system.m_mol);
+    construct_T_unsorted(T_mat, system.mAOs);
 
     
     
@@ -62,7 +64,7 @@ int eval_Hcoremat(Molecule_basis& system, arma::mat &H_mat){
     std::cout << "Printing V mat "<<std::endl;
     V_mat.print();
     // return H_mat to its original order.
-    H_mat = H_mat(undo_sorted_indices, undo_sorted_indices);
+    // H_mat = H_mat(undo_sorted_indices, undo_sorted_indices);
 
     return 0;
 }
@@ -204,6 +206,40 @@ void construct_T(arma::mat &Tmat, std::vector<AO> &mAOs, size_t p_start_ind){
 }
 
 
+// UNSORTED FUNCTIONS
+void construct_S_unsorted(arma::mat &Smat, std::vector<AO> &mAOs){
+    // Handle ss, then sp, then pp.
+    
+    for (size_t mu = 0; mu < Smat.n_rows; mu++){
+        for (size_t nu = 0;  nu < Smat.n_cols; nu++){
+            Smat(mu,nu) = eval_Smunu(mAOs[mu], mAOs[nu]);
+        }
+    }
+
+}
+
+void construct_V_unsorted(arma::mat &Vmat, std::vector<AO> &mAOs, const Molecule &mol){
+    // Handle ss, then sp, then pp.
+    // Might be inefficient for small s_orbs.size() and p_orbs.size()
+    
+    for (size_t mu = 0; mu < Vmat.n_rows; mu++){
+        for (size_t nu = 0;  nu < Vmat.n_cols; nu++){
+            Vmat(mu,nu) = eval_Vmunu(mAOs[mu], mAOs[nu],mol);
+        }
+    }
+}
+void construct_T_unsorted(arma::mat &Tmat, std::vector<AO> &mAOs){
+    
+    for (size_t mu = 0; mu < Tmat.n_rows; mu++){
+        for (size_t nu = 0;  nu < Tmat.n_cols; nu++){
+            Tmat(mu,nu) = eval_Tmunu(mAOs[mu], mAOs[nu]);
+        }
+    }
+}
+
+
+
+
 
 double eval_Smunu(AO &mu, AO &nu){
     assert(mu.alpha.size()==mu.d_coe.size() && nu.alpha.size()==nu.d_coe.size()); // This should be true?
@@ -287,6 +323,7 @@ double eval_Vmunu(AO &mu, AO &nu, const Molecule &mol){
 
     for (size_t c = 0; c < mol.mAtoms.size(); c++){
         arma::vec C = mol.mAtoms[c].m_coord; // coordinates of the atom
+        int Z = mol.mAtoms[c].m_effective_charge;
         for (size_t mup = 0; mup < mu_no_primitives; mup++){
             double alpha = mu.alpha(mup);
             double d_kmu = mu.d_coe(mup);
@@ -294,7 +331,7 @@ double eval_Vmunu(AO &mu, AO &nu, const Molecule &mol){
             for (size_t nup = 0; nup < nu_no_primitives; nup++){
                 double beta = nu.alpha(nup);
                 double d_knu = nu.d_coe(nup);
-                total +=  d_knu * d_kmu * nuclear_attraction(A,  l1,  m1, n1, alpha, B, l2, m2, n2, beta, C);
+                total +=  d_knu * d_kmu * Z* nuclear_attraction(A,  l1,  m1, n1, alpha, B, l2, m2, n2, beta, C);
             }
         }
     }

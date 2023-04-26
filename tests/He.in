@@ -1,0 +1,10 @@
+$molecule
+0 1
+He 0.0 0.0 0.0
+$end
+
+
+$rem
+Method HF
+Basis STO-3G
+$end

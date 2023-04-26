@@ -13,6 +13,9 @@ size_t sort_AOs(std::vector<AO> &unsorted_AOs, std::vector<AO> &sorted_AOs, arma
 void construct_S(arma::mat &Smat, std::vector<AO> &mAOs, size_t p_start_ind);
 void construct_V(arma::mat &Vmat, std::vector<AO> &mAOs, size_t p_start_ind, const Molecule &mol);
 void construct_T(arma::mat &Tmat, std::vector<AO> &mAOs, size_t p_start_ind);
+void construct_S_unsorted(arma::mat &Smat, std::vector<AO> &mAOs);
+void construct_V_unsorted(arma::mat &Vmat, std::vector<AO> &mAOs, const Molecule &mol);
+void construct_T_unsorted(arma::mat &Tmat, std::vector<AO> &mAOs);
 
 
 double eval_Smunu(AO &mu, AO &nu);
