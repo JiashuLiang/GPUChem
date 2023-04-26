@@ -39,7 +39,8 @@ int run_SCF(std::string fin, std::string fout){
 int main(int argc, char *argv[])
 {
   return
-    run_SCF("H2.in", "H2.out")|
-    // run_SCF("C2H4.in", "C2H4.out")|
+    // run_SCF("H2_6311g.in", "H2_6311g.out")|
+    // run_SCF("H2_10.in", "H2_10.out")|
+    run_SCF("C2H4.in", "C2H4.out")|
     0;
 }

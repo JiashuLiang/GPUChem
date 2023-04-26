@@ -54,10 +54,8 @@ int eval_Hcoremat(Molecule_basis& system, arma::mat &H_mat){
     
     H_mat = T_mat + V_mat;
 
-    std::cout << "Printing T mat "<<std::endl;
-    T_mat.print();
-    std::cout << "Printing V mat "<<std::endl;
-    V_mat.print();
+    // T_mat.print("Printing T mat ");
+    // V_mat.print("Printing V mat ");
     // return H_mat to its original order.
     H_mat = H_mat(undo_sorted_indices, undo_sorted_indices);
 
