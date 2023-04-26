@@ -51,6 +51,9 @@ int eval_Hcoremat(Molecule_basis& system, arma::mat &H_mat){
     // Perform construction of H, sorted into blocks of ss, sp, ps,pp
     construct_V(V_mat, sorted_AOs, p_start_ind, system.m_mol);
     construct_T(T_mat, sorted_AOs, p_start_ind);
+
+
+    
     
     H_mat = T_mat + V_mat;
 
@@ -120,13 +123,13 @@ void construct_S(arma::mat &Smat, std::vector<AO> &mAOs, size_t p_start_ind){
     }
     // sp
     for (size_t mu = 0; mu < p_start_ind; mu++){
-        for (size_t nu = 0; p_start_ind < Smat.n_cols; nu++){
+        for (size_t nu = p_start_ind; nu < Smat.n_cols; nu++){
             Smat(mu,nu) = eval_Smunu(mAOs[mu], mAOs[nu]);
         }
     }
     // pp
     for (size_t mu = p_start_ind; mu < Smat.n_rows; mu++){
-        for (size_t nu = 0; p_start_ind < Smat.n_cols; nu++){
+        for (size_t nu = p_start_ind; nu < Smat.n_cols; nu++){
             Smat(mu,nu) = eval_Smunu(mAOs[mu], mAOs[nu]);
         }
     }
@@ -151,13 +154,13 @@ void construct_V(arma::mat &Vmat, std::vector<AO> &mAOs, size_t p_start_ind, con
     }
     // sp
     for (size_t mu = 0; mu < p_start_ind; mu++){
-        for (size_t nu = 0; p_start_ind < Vmat.n_cols; nu++){
+        for (size_t nu = p_start_ind; nu < Vmat.n_cols; nu++){
             Vmat(mu,nu) = eval_Vmunu(mAOs[mu], mAOs[nu], mol);
         }
     }
     // pp
     for (size_t mu = p_start_ind; mu < Vmat.n_rows; mu++){
-        for (size_t nu = 0; p_start_ind < Vmat.n_cols; nu++){
+        for (size_t nu = p_start_ind; nu < Vmat.n_cols; nu++){
             Vmat(mu,nu) = eval_Vmunu(mAOs[mu], mAOs[nu], mol);
         }
     }
@@ -187,13 +190,13 @@ void construct_T(arma::mat &Tmat, std::vector<AO> &mAOs, size_t p_start_ind){
     }
     // sp
     for (size_t mu = 0; mu < p_start_ind; mu++){
-        for (size_t nu = 0; p_start_ind < Tmat.n_cols; nu++){
+        for (size_t nu = p_start_ind; nu < Tmat.n_cols; nu++){
             Tmat(mu,nu) = eval_Tmunu(mAOs[mu], mAOs[nu]);
         }
     }
     // pp
     for (size_t mu = p_start_ind; mu < Tmat.n_rows; mu++){
-        for (size_t nu = 0; p_start_ind < Tmat.n_cols; nu++){
+        for (size_t nu = p_start_ind; nu < Tmat.n_cols; nu++){
             Tmat(mu,nu) = eval_Tmunu(mAOs[mu], mAOs[nu]);
         }
     }
