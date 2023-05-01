@@ -5,6 +5,7 @@
 #include <armadillo>
 #include <math.h>
 #include <assert.h>
+#include <cuda.h>
 
 #define max(a,b) ((a)>(b)?(a):(b))
 
