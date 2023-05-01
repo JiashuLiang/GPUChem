@@ -21,8 +21,11 @@ class RSCF: public SCF{
     private:
         Molecule_basis &m_molbasis;
         int dim, num_atoms, max_iter;
-        double tol, diff;
+        double tol, schwarz_tol, diff;
         arma::mat S_mat, X_mat;
+        arma::mat Schwarz_mat;
+        arma::mat rys_root;
+        
         arma::mat Ga;
         arma::mat H_core;
         arma::mat Pa, Pa_ascol;

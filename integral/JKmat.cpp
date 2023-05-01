@@ -1,7 +1,6 @@
 #include "JKmat.h"
 #include <basis/molecule_basis.h>
 #include <armadillo>
-#include <filesystem>
 #include <cmath>
 
 // calculates (i j | k l), each of those is a CGTO basis function
@@ -25,22 +24,12 @@ double Ix_calc_pppp(double& t2, double& xi, double& xj, double& xk, double& xl, 
 
 
 
-int eval_Gmat_RSCF(Molecule_basis& system, arma::mat &Pa_mat, arma::mat &G_mat){
+int eval_Gmat_RSCF(Molecule_basis& system, arma::mat& rys_root, arma::mat& Schwarz_mat, double schwarz_tol, arma::mat &Pa_mat, arma::mat &G_mat){
 	// F = H + G, G is the two-electron part of the Fock matrix
 	// G_{mu nu} = \sum_{si,la}[2(mu nu | si la) - (mu la | si nu)] P_{si la}
 
 	int nbasis = system.mAOs.size();
-	arma::mat rys_root;
-    std::string aux;
-    if(const char* env_p = std::getenv("GPUChem_aux")){
-        aux = std::string(env_p);
-        if (!std::filesystem::is_directory(aux)) {
-            throw std::runtime_error("basis/basis_set.cpp: The directory specified by GPUChem_aux does not exist!");
-        }
-    }
-
-	rys_root.load(aux + "/rys_root.txt");
-	// text file contatins rys root (squared) and their weights from X = 0 to 30 (0.01 increment)
+	// arma::mat rys_root;
 
 	// checking the basis set to see if there is high angular momentum stuff
 	for (int mu = 0; mu < nbasis; mu++) {
@@ -48,34 +37,146 @@ int eval_Gmat_RSCF(Molecule_basis& system, arma::mat &Pa_mat, arma::mat &G_mat){
 			std::cout << "higher angular momentum basis detected! Can only do s and p";
 			return 1;
 		}
-	}	
+	}
+
+	arma::mat J_mat(nbasis, nbasis);
+	arma::mat K_mat(nbasis, nbasis);
+	eval_Jmat_RSCF(system, rys_root, Schwarz_mat, schwarz_tol, Pa_mat, J_mat);
+	eval_Kmat_RSCF(system, rys_root, Schwarz_mat, schwarz_tol, Pa_mat, K_mat);
+	G_mat = 2 * J_mat - K_mat;
+	
+	// double schwarz_tol_sq = schwarz_tol * schwarz_tol;
 	
 	// brute force direct SCF - we won't be saving (mu nu | si la)'s
-	// arma::mat G_mat(nbasis, nbasis, arma::fill::zeros); // ??????
+	// pragma omp parallel for
+	// for (int mu = 0; mu < nbasis; mu++){
+	// 	AO AO_mu = system.mAOs[mu];
+	// 	for (int nu = mu; nu < nbasis; nu++){ // simple symmetry
+	// 		// each mu nu can be handled bu one GPU block thread
+	// 		// if (Schwarz_mat(mu, nu) < schwarz_tol_sq)
+	// 		// 	continue;
+	// 		AO AO_nu = system.mAOs[nu];
+	// 		double Gmunu = 0;
+	// 		for (int si = 0; si < nbasis; si++){
+	// 			AO AO_si = system.mAOs[si];
+	// 			for (int la = 0; la < nbasis; la++){
+	// 				AO AO_la = system.mAOs[la];
+	// 				double munusila = 0;
+	// 				double mulasinu = 0;
+	// 				if (Schwarz_mat(mu, nu) * Schwarz_mat(si, la) < schwarz_tol_sq)
+	// 					munusila = 0;
+	// 				else
+	// 					munusila = eval_2eint(rys_root, AO_mu, AO_nu, AO_si, AO_la);
+	// 				if (Schwarz_mat(mu, la) * Schwarz_mat(si, nu) < schwarz_tol_sq)
+	// 					mulasinu = 0;
+	// 				else
+	// 					mulasinu = eval_2eint(rys_root, AO_mu, AO_la, AO_si, AO_nu);
+	// 				Gmunu += (2 * munusila - mulasinu) * Pa_mat(si, la);
+	// 				// the paper uses (si la) symmetry I guess for the J matrix, but for simplicity not used here
+	// 				// also neither presceening (!) nor load balancing (?) is considered here, which might be bad
+	// 			}
+	// 		}
+	// 		G_mat(mu, nu) = Gmunu;
+	// 		G_mat(nu, mu) = Gmunu;
+	// 	}
+	// }
+
+
+	return 0;
+}
+
+int eval_Jmat_RSCF(Molecule_basis& system, arma::mat& rys_root, arma::mat& Schwarz_mat, double schwarz_tol, arma::mat &Pa_mat, arma::mat &J_mat){
+	// F = H + G, G is the two-electron part of the Fock matrix
+	// G_{mu nu} = \sum_{si,la}[2(mu nu | si la) - (mu la | si nu)] P_{si la}
+
+	int nbasis = system.mAOs.size();
+	// arma::mat rys_root;
+	
+	double schwarz_tol_sq = schwarz_tol * schwarz_tol;
+	double schwarz_max = Schwarz_mat.max();
+	
+	// direct SCF - we won't be saving (mu nu | si la)'s
 	// pragma omp parallel for
 	for (int mu = 0; mu < nbasis; mu++){
 		AO AO_mu = system.mAOs[mu];
 		for (int nu = mu; nu < nbasis; nu++){ // simple symmetry
 			// each mu nu can be handled bu one GPU block thread
+			if (Schwarz_mat(mu, nu) * schwarz_max < schwarz_tol_sq)
+				continue;
 			AO AO_nu = system.mAOs[nu];
-			double Gmunu = 0;
+			double Jmunu = 0;
 			for (int si = 0; si < nbasis; si++){
 				AO AO_si = system.mAOs[si];
-				for (int la = 0; la < nbasis; la++){
+				if (Schwarz_mat(mu, nu) * Schwarz_mat(si, si) > schwarz_tol_sq)
+					Jmunu += eval_2eint(rys_root, AO_mu, AO_nu, AO_si, AO_si) * Pa_mat(si, si);
+				for (int la = si + 1; la < nbasis; la++){
 					AO AO_la = system.mAOs[la];
-					Gmunu += (2 * eval_2eint(rys_root, AO_mu, AO_nu, AO_si, AO_la) - eval_2eint(rys_root, AO_mu, AO_la, AO_si, AO_nu)) * Pa_mat(si, la);
-					// the paper uses (si la) symmetry I guess for the J matrix, but for simplicity not used here
-					// also neither presceening (!) nor load balancing (?) is considered here, which might be bad
+					if (Schwarz_mat(mu, nu) * Schwarz_mat(si, la) > schwarz_tol_sq)
+						Jmunu += 2 * eval_2eint(rys_root, AO_mu, AO_nu, AO_si, AO_la) * Pa_mat(si, la);
 				}
 			}
-			G_mat(mu, nu) = Gmunu;
-			G_mat(nu, mu) = Gmunu;
+			J_mat(mu, nu) = Jmunu;
+			J_mat(nu, mu) = Jmunu;
 		}
 	}
 
 
 	return 0;
 }
+
+int eval_Kmat_RSCF(Molecule_basis& system, arma::mat& rys_root, arma::mat& Schwarz_mat, double schwarz_tol, arma::mat &Pa_mat, arma::mat &K_mat){
+	// F = H + G, G is the two-electron part of the Fock matrix
+	// G_{mu nu} = \sum_{si,la}[2(mu nu | si la) - (mu la | si nu)] P_{si la}
+
+	int nbasis = system.mAOs.size();
+	// arma::mat rys_root;
+	
+	double schwarz_tol_sq = schwarz_tol * schwarz_tol;
+	double schwarz_max = Schwarz_mat.max();
+	
+	// direct SCF - we won't be saving (mu nu | si la)'s
+	// pragma omp parallel for
+	for (int mu = 0; mu < nbasis; mu++){
+		AO AO_mu = system.mAOs[mu];
+		for (int nu = mu; nu < nbasis; nu++){ // simple symmetry
+			// each mu nu can be handled bu one GPU block thread
+			AO AO_nu = system.mAOs[nu];
+			double Kmunu = 0;
+			for (int si = 0; si < nbasis; si++){
+				AO AO_si = system.mAOs[si];
+				for (int la = 0; la < nbasis; la++){
+					AO AO_la = system.mAOs[la];
+					if (Schwarz_mat(mu, la) * Schwarz_mat(si, nu) > schwarz_tol_sq)
+						Kmunu += eval_2eint(rys_root, AO_mu, AO_la, AO_si, AO_nu) * Pa_mat(si, la);
+				}
+			}
+			K_mat(mu, nu) = Kmunu;
+			K_mat(nu, mu) = Kmunu;
+		}
+	}
+
+
+	return 0;
+}
+
+
+int eval_Schwarzmat(Molecule_basis& system, arma::mat& rys_root, arma::mat& Schwarz_mat){
+	// evaluate (mu nu | mu nu) for Schwarz prescreening
+	int nbasis = system.mAOs.size();
+
+	for (size_t mu = 0; mu < nbasis; mu++){
+		AO AO_mu = system.mAOs[mu];
+		for (size_t nu = mu; nu < nbasis; nu++){
+			AO AO_nu = system.mAOs[nu];
+			double Schmunu = eval_2eint(rys_root, AO_mu, AO_nu, AO_mu, AO_nu);
+			Schwarz_mat(mu, nu) = Schmunu;
+			Schwarz_mat(nu, mu) = Schmunu;
+		}
+	}
+
+	return 0;
+}
+
 
 double eval_2eint(arma::mat& rys_root, AO& AO_i, AO& AO_j, AO& AO_k, AO& AO_l){
 	// some dirty work

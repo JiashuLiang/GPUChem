@@ -4,6 +4,7 @@
 #include <cassert>
 #include <armadillo>
 #include <iostream>
+#include <filesystem>
 #include <vector>
 #include <integral/hcore.h>
 #include <integral/JKmat.h>
@@ -15,6 +16,8 @@ RSCF::RSCF(Molecule_basis &m_molbasis_i, int max_it, double tolerence) : m_molba
 {
   dim = m_molbasis.mAOs.size();
   num_atoms = m_molbasis.m_mol.mAtoms.size();
+
+  schwarz_tol = 1e-3 * tol;
 
   Pa = arma::zeros(dim, dim);
   Ga = arma::zeros(dim, dim);
@@ -65,12 +68,29 @@ int RSCF::init()
     std::cerr << "Warn! H_core matrix evaluation is failed." << std::endl;
     return 1;
   }
-  H_core.print("H_core");
+  // H_core.print("H_core");
 
   // Initial guess for Pa use Ca = I
   Ca.eye();
   Pa = Ca.cols(0, m_molbasis.num_alpha_ele - 1) * Ca.cols(0, m_molbasis.num_alpha_ele - 1).t();
   diff = 1.;
+
+  // loading rys roots
+  std::string aux;
+  if (const char* env_p = std::getenv("GPUChem_aux")){
+    aux = std::string(env_p);
+      if (!std::filesystem::is_directory(aux)) {
+        throw std::runtime_error("basis/basis_set.cpp: The directory specified by GPUChem_aux does not exist!");
+    }
+  }
+  rys_root.load(aux + "/rys_root.txt");
+  // text file contatins rys root (squared) and their weights from X = 0 to 30 (0.01 increment)
+
+  // make the matrix for Schwarz prescreening
+  Schwarz_mat.set_size(dim, dim);
+  Schwarz_mat.zeros();
+  eval_Schwarzmat(m_molbasis, rys_root, Schwarz_mat);
+
   return 0;
 }
 
@@ -79,7 +99,7 @@ int RSCF::run()
 {
   // std::cout << "SCF iteration starts." << std::endl;
   // Get initial guess for Ga
-  eval_Gmat_RSCF(m_molbasis, Pa, Ga);
+  eval_Gmat_RSCF(m_molbasis, rys_root, Schwarz_mat, schwarz_tol, Pa, Ga);
   arma::mat Fa = H_core + Ga;
   arma::mat Pa_old;
   size_t k = 0;
@@ -104,7 +124,7 @@ int RSCF::run()
     if (diff < tol)
       break;
     // Pa.print("Pa_new");
-    eval_Gmat_RSCF(m_molbasis, Pa, Ga); // Get new Ga
+    eval_Gmat_RSCF(m_molbasis, rys_root, Schwarz_mat, schwarz_tol, Pa, Ga);
     Fa = H_core + Ga;
   }
   if (k == max_iter)
