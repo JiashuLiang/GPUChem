@@ -4,6 +4,7 @@ project(Integral C CXX)
 set(SRC
     hcore.cpp
     JKmat.cpp
+    HartreeFock_Rys.cpp
 )
 
 add_library(integral ${SRC})

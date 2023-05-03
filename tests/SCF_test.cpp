@@ -6,6 +6,7 @@
 #include <Setup/Jobinfo.h>
 #include <basis/molecule_basis.h>
 #include <SCF/SCF.h>
+#include <SCF/RSCF.h>
 
 
 using namespace std;
@@ -22,12 +23,12 @@ int run_SCF(std::string fin, std::string fout){
     MyMolBasis.Construct_basis(MyJob.GetRem("basis"));
     // MyMolBasis.PrintAll();
 
-    RSCF mySCF(MyMolBasis, 50, 1e-5);
-    int ok = mySCF.init();
+    SCF* mySCF = new RSCF(MyMolBasis, 50, 1e-5, "HF", "plain");
+    int ok = mySCF->init();
     if(ok != 0) return 1;
-    ok = mySCF.run();
+    ok = mySCF->run();
     if(ok != 0) return 1;
-    double Energy = mySCF.getEnergy();
+    double Energy = mySCF->getEnergy();
     std::cout<< "The molecule has energy "<< Energy << std::endl;
 
 

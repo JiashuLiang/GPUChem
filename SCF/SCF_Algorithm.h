@@ -1,30 +1,11 @@
-#if !defined SCF_H
-#define SCF_H
+#if !defined SCF_ALGORITHM_H
+#define SCF_ALGORITHM_H
 
 
 #include <armadillo>
 #include <cassert>
 #include <basis/molecule_basis.h>
 
-
-class SCF{
-    public:
-        virtual int init()=0;
-        virtual int run()=0;
-        // return density matrix's pointer
-        virtual double * getP_ptr()=0;
-        virtual double getEnergy()=0;
-        virtual int getdim()=0;
-};
-
-
-
-
-class SCF_algorithm{
-    public:
-        virtual int init()=0;
-        virtual int run()=0;
-};
 
 // class USCF: public SCF{
 //     private:
@@ -52,4 +33,4 @@ class SCF_algorithm{
 
 
 
-#endif // SCF_H
+#endif // SCF_ALGORITHM_H
