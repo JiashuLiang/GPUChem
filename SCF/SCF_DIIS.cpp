@@ -1,6 +1,7 @@
 #include "RSCF.h"
 #include <armadillo>
 #include <iostream>
+#include <cmath>
 
 
 RSCF_DIIS::RSCF_DIIS(RSCF *m_scf_i, int max_it, double tolerence, int DIIS_circle_i): 
@@ -15,7 +16,7 @@ int RSCF_DIIS::init()
   // Initial guess for Pa use Ca = I
   m_scf->Ca.eye();
   m_scf->UpdateDensity();
-  diff = 1.;
+  res_error = 1.;
 
   return 0;
 }
@@ -39,7 +40,10 @@ int RSCF_DIIS::run()
 {
   size_t dim = m_scf->nbasis;
 
-      m_scf->UpdateFock();
+  m_scf->UpdateFock();
+  m_scf->UpdateEnergy();
+  double E_old = m_scf->Ee;
+
   arma::mat Pa_old(dim, dim), Fa_p(dim, dim);
   arma::mat Fa_record(dim*dim, DIIS_circle);
   arma::mat ea(dim*dim, DIIS_circle);
@@ -64,27 +68,27 @@ int RSCF_DIIS::run()
     arma::eig_sym(m_scf->Ea, m_scf->Ca, Fa_p);  // Solve eigen equation Fa' * Ca' = Ea * Ca'
     m_scf->Ca = m_scf->X_mat * m_scf->Ca; // Get Ca = X_mat * Ca'
     m_scf->UpdateDensity();
-    m_scf->UpdateEnergy();
-    diff = arma::norm(m_scf->Pa - Pa_old, "fro");
-    std::cout << "Iteration " << k << ": the difference fro norm is " << diff << ", Ee = " << m_scf->Ee<< std::endl;
-    if (diff < tol)
-      break;
-    
-      m_scf->UpdateFock();
+    E_old = m_scf->Ee;
+    m_scf->UpdateEnergy();    
+    m_scf->UpdateFock();
     arma::mat Fa_r(Fa_record.colptr(k_DIIS), dim, dim, false, true);
     Fa_r = m_scf->Fa; 
     arma::mat ea_r(ea.colptr(k_DIIS), dim, dim, false, true);
     ea_r = Fa_r * m_scf->Pa * m_scf->S_mat - m_scf->S_mat * m_scf->Pa * Fa_r;
-    // if(k_DIIS == DIIS_circle - 1 && k/DIIS_circle > 0){
+    res_error = arma::norm(ea_r, "fro") ;
     
+    std::cout << "Iteration " << k << ": Ee = " << m_scf->Ee 
+        << ", Ee diff = " << std::abs(m_scf->Ee -E_old) << ", DIIS error = " << res_error << std::endl;
+    if (res_error < 100 * tol && std::abs(m_scf->Ee -E_old) < tol)
+      break;
   }
   if (k == max_iter)
   {
     std::cout << "Error: the job could not be finished in " << max_iter << "iterations.\n";
     return 1;
   }
-  m_scf->Ea.print("Ea");
-  m_scf->Ca.print("Ca");
+  // m_scf->Ea.print("Ea");
+  m_scf->Ca.raw_print("Ca");
 
   return 0;
 }

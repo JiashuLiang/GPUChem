@@ -40,7 +40,7 @@ class RSCF_plain: public SCF_algorithm{
         RSCF *m_scf;
 
         int  max_iter;
-        double tol, diff;
+        double tol, res_error;
 
         virtual int init();
         virtual int run();
@@ -56,7 +56,7 @@ class RSCF_DIIS: public SCF_algorithm{
 
         int DIIS_circle;
         int  max_iter;
-        double tol, diff;
+        double tol, res_error;
 
         virtual int init();
         virtual int run();

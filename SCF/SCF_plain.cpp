@@ -1,6 +1,7 @@
 #include "RSCF.h"
 #include <armadillo>
 #include <iostream>
+#include <cmath>
 
 
 RSCF_plain::RSCF_plain(RSCF *m_scf_i, int max_it, double tolerence): m_scf(m_scf_i), max_iter(max_it), tol(tolerence){
@@ -14,7 +15,7 @@ int RSCF_plain::init()
   // Initial guess for Pa use Ca = I
   m_scf->Ca.eye();
   m_scf->UpdateDensity();
-  diff = 1.;
+  res_error = 1.;
 
 
   return 0;
@@ -27,6 +28,7 @@ int RSCF_plain::run()
   // Get initial guess for Ga
   m_scf->UpdateFock();
   arma::mat Pa_old, Fa_p;
+  double E_old;
   size_t k = 0;
   std::cout << "Iteration start! "<< std::endl;
   for (; k < max_iter; k++)
@@ -41,10 +43,11 @@ int RSCF_plain::run()
     // Ea.print("Ea");
     m_scf->Ca = m_scf->X_mat * m_scf->Ca; // Get Ca = X_mat * Ca'
     m_scf->UpdateDensity();
+    E_old = m_scf->Ee;
     m_scf->UpdateEnergy();
-    diff = arma::norm(m_scf->Pa- Pa_old, "fro");
-    std::cout << "Iteration " << k << ": the difference fro norm is " << diff << ", Ee = " << m_scf->Ee<< std::endl;
-    if (diff < tol)
+    res_error = arma::norm(m_scf->Pa- Pa_old, "fro");
+    std::cout << "Iteration " << k << ": the res_errorerence fro norm is " << res_error << ", Ee = " << m_scf->Ee << ", Ee  diff  = " << std::abs(m_scf->Ee -E_old) << std::endl;
+    if (res_error < 100 * tol && std::abs(m_scf->Ee -E_old) < tol)
       break;
     // Pa.print("Pa_new");
     m_scf->UpdateFock();
@@ -54,7 +57,7 @@ int RSCF_plain::run()
     std::cout << "Error: the job could not be finished in " << max_iter << "iterations.\n";
     return 1;
   }
-  m_scf->Ea.print("Ea");
-  m_scf->Ca.print("Ca");
+  m_scf->Ea.raw_print("Ea");
+  // m_scf->Ca.raw_print("Ca");
   return 0;
 }
