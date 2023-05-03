@@ -4,6 +4,7 @@ project(SCF C CXX)
 set(SRC
     RSCF.cpp
     SCF_plain.cpp
+    SCF_DIIS.cpp
 )
 
 add_library(scf ${SRC})

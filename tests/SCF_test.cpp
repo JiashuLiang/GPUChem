@@ -23,7 +23,7 @@ int run_SCF(std::string fin, std::string fout){
     MyMolBasis.Construct_basis(MyJob.GetRem("basis"));
     // MyMolBasis.PrintAll();
 
-    SCF* mySCF = new RSCF(MyMolBasis, 50, 1e-5, "HF", "plain");
+    SCF* mySCF = new RSCF(MyMolBasis, 50, 1e-5, "HF", "DIIS");
     int ok = mySCF->init();
     if(ok != 0) return 1;
     ok = mySCF->run();

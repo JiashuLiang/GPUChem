@@ -10,7 +10,7 @@ class RSCF: public SCF{
         Hamiltonian *m_hamiltonian;
         Molecule_basis &m_molbasis;
 
-        int dim, num_atoms, schwarz_tol;
+        int nbasis, num_atoms, schwarz_tol;
         arma::mat S_mat, X_mat;
         arma::mat Ga;
         arma::mat H_core;
@@ -28,7 +28,7 @@ class RSCF: public SCF{
         virtual int run();
         virtual double * getP_ptr();
         virtual double getEnergy();
-        virtual int getdim(){return dim;}
+        virtual int getnbasis(){return nbasis;}
         void UpdateEnergy();
         void UpdateFock();
         void UpdateDensity();
@@ -49,6 +49,22 @@ class RSCF_plain: public SCF_algorithm{
 };
 
 
+
+class RSCF_DIIS: public SCF_algorithm{
+    public:
+        RSCF *m_scf;
+
+        int DIIS_circle;
+        int  max_iter;
+        double tol, diff;
+
+        virtual int init();
+        virtual int run();
+        RSCF_DIIS() = default;
+        RSCF_DIIS(RSCF *m_scf_i, int max_it, double tolerence, int DIIS_circle_i = 4);
+
+        void DIIS(arma::mat &e, arma::vec &c);
+};
 
 
 #endif // RSCF_H

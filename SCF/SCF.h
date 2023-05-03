@@ -14,7 +14,7 @@ class SCF{
         // return density matrix's pointer
         virtual double * getP_ptr()=0;
         virtual double getEnergy()=0;
-        virtual int getdim()=0;
+        virtual int getnbasis()=0;
 };
 
 
@@ -29,7 +29,7 @@ class SCF_algorithm{
 // class USCF: public SCF{
 //     private:
 //         Molecule_basis &m_molbasis;
-//         int dim, num_atoms, max_iter;
+//         int nbasis, num_atoms, max_iter;
 //         double tol;
 //         arma::mat S_mat;
 //         arma::mat H_core;

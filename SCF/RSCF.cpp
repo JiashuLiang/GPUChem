@@ -9,16 +9,16 @@ double hartree_to_ev = 27.211396641308;
 RSCF::RSCF(Molecule_basis &m_molbasis_i, int max_it, double tolerence,
             const std::string hamiltonian_name, const std::string scf_algorithm_name): m_molbasis(m_molbasis_i)
 {
-  dim = m_molbasis.mAOs.size();
+  nbasis = m_molbasis.mAOs.size();
   num_atoms = m_molbasis.m_mol.mAtoms.size();
 
-  Pa = arma::zeros(dim, dim);
-  Ga = arma::zeros(dim, dim);
-  Ca.set_size(dim, dim);
-  Ea.set_size(dim);
+  Pa = arma::zeros(nbasis, nbasis);
+  Ga = arma::zeros(nbasis, nbasis);
+  Ca.set_size(nbasis, nbasis);
+  Ea.set_size(nbasis);
 
-  H_core.set_size(dim, dim);
-  S_mat.set_size(dim, dim);
+  H_core.set_size(nbasis, nbasis);
+  S_mat.set_size(nbasis, nbasis);
 
   // std::cout << std::setprecision(3);
   // gamma.print("gamma");
@@ -32,8 +32,8 @@ RSCF::RSCF(Molecule_basis &m_molbasis_i, int max_it, double tolerence,
 
 
   //Initialize the SCF algorithm
-  if (scf_algorithm_name == "plain")
-    m_scf_algorithm = new RSCF_plain(this, max_it, tolerence);
+  if (scf_algorithm_name == "DIIS")
+    m_scf_algorithm = new RSCF_DIIS(this, max_it, tolerence, 4);
   else
     m_scf_algorithm = new RSCF_plain(this, max_it, tolerence);
     
