@@ -7,11 +7,11 @@ $end
 $rem
 input_bohr true
 method hf
-basis 6-311g
+basis sto-3g
 
 MAX_SCF_CYCLES 50
 THRESH  14
-SCF_CONVERGENCE  6
+SCF_CONVERGENCE  10
 
 SYM_IGNORE true
 SYMMETRY FALSE

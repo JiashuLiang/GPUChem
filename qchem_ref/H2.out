@@ -88,12 +88,12 @@
  Parts of Q-Chem use Armadillo 9.900.5 (Nocturnal Misbehaviour).
  http://arma.sourceforge.net/
 
- Q-Chem begins on Tue Apr 25 14:28:45 2023  
+ Q-Chem begins on Wed May  3 14:04:29 2023  
 
- Host: login13
+ Host: login39
 0
 
-     Scratch files written to /pscratch/sd/j/jsliang/QC_scratch/qchem218900//
+     Scratch files written to /pscratch/sd/j/jsliang/QC_scratch/qchem33539//
  Processing $rem in /global/cfs/cdirs/mp54/qchem602//config/preferences:
  Processing $rem in /global/homes/j/jsliang/.qchemrc:
 
@@ -115,7 +115,7 @@ basis sto-3g
 
 MAX_SCF_CYCLES 50
 THRESH  14
-SCF_CONVERGENCE  6
+SCF_CONVERGENCE  10
 
 SYM_IGNORE true
 SYMMETRY FALSE
@@ -201,7 +201,7 @@ Kinetic energy for orbital 1 = 0.000000000000000
 Kinetic energy for orbital 2 = 0.000000000000000
  A restricted SCF calculation will be
  performed using DIIS
- SCF converges when DIIS error is below 1.0e-06
+ SCF converges when DIIS error is below 1.0e-10
  HF Exchange   Energy =  -0.53581724209841
  One-Electron  Energy =  -2.24081801800967
  Total Coulomb Energy =   1.34428186952364
@@ -255,7 +255,7 @@ Kinetic energy for orbital 2 = 1.536851211351201
             1           2
     1  -0.3655374  -0.5938854
     2  -0.5938854  -0.3655374
- SCF time:   CPU 0.01s  wall 0.00s 
+ SCF time:   CPU 0.02s  wall 0.00s 
  DFT Correlation    Energy =   0.00000000000000
  DFT Exchange       Energy =   0.00000000000000
  HF Exchange        Energy =  -0.67459408432337
@@ -266,7 +266,7 @@ Kinetic energy for orbital 2 = 1.536851211351201
  Nuclear repulsion Energy =   0.71428571448171
  SCF   energy in the final basis set =       -1.1167143250
  Total energy in the final basis set =       -1.1167143250
- Total wall time for computing JK: 0.00 s (2)
+ Total wall time for computing JK: 0.01 s (2)
 
  --------------------------------------------------------------
 
@@ -312,8 +312,8 @@ Kinetic energy for orbital 2 = 1.536851211351201
       XXZZ      -0.9218   XYZZ       0.0000   YYZZ      -0.5101
       XZZZ       0.0000   YZZZ       0.0000   ZZZZ      -1.5302
  -----------------------------------------------------------------
- Total job time:  0.18s(wall), 0.13s(cpu) 
- Tue Apr 25 14:28:45 2023
+ Total job time:  0.32s(wall), 0.16s(cpu) 
+ Wed May  3 14:04:30 2023
 
         *************************************************************
         *                                                           *
