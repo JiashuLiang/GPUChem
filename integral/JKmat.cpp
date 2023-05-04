@@ -29,7 +29,6 @@ int eval_Gmat_RSCF(Molecule_basis& system, arma::mat& rys_root, arma::mat& Schwa
 	// G_{mu nu} = \sum_{si,la}[2(mu nu | si la) - (mu la | si nu)] P_{si la}
 
 	int nbasis = system.mAOs.size();
-	// arma::mat rys_root;
 
 	// checking the basis set to see if there is high angular momentum stuff
 	for (int mu = 0; mu < nbasis; mu++) {
@@ -47,8 +46,8 @@ int eval_Gmat_RSCF(Molecule_basis& system, arma::mat& rys_root, arma::mat& Schwa
 	
 	// double schwarz_tol_sq = schwarz_tol * schwarz_tol;
 	
-	// brute force direct SCF - we won't be saving (mu nu | si la)'s
-	// pragma omp parallel for
+	// // brute force direct SCF - we won't be saving (mu nu | si la)'s
+	// // # pragma omp parallel for
 	// for (int mu = 0; mu < nbasis; mu++){
 	// 	AO AO_mu = system.mAOs[mu];
 	// 	for (int nu = mu; nu < nbasis; nu++){ // simple symmetry
@@ -208,15 +207,15 @@ double eval_2eint(arma::mat& rys_root, AO& AO_i, AO& AO_j, AO& AO_k, AO& AO_l){
 	                
 	                double xA = (ai*xi + aj*xj) / (ai+aj);
 	                double xB = (ak*xk + al*xl) / (ak+al);
-	                double Dx = rho *(xA - xB)*(xA - xB);
+	                double Dx = rho * (xA - xB) * (xA - xB);
 	                
 	                double yA = (ai*yi + aj*yj) / (ai+aj);
 	                double yB = (ak*yk + al*yl) / (ak+al);
-	                double Dy = rho*(yA - yB)*(yA - yB);
+	                double Dy = rho * (yA - yB) * (yA - yB);
 	                
 	                double zA = (ai*zi + aj*zj) / (ai+aj);
 	                double zB = (ak*zk + al*zl) / (ak+al);
-	                double Dz = rho*(zA - zB)*(zA - zB);
+	                double Dz = rho * (zA - zB) * (zA - zB);
 	                
 	                double X = Dx + Dy + Dz;
 	                double t1, t2, t3, w1, w2, w3;
@@ -241,23 +240,33 @@ double eval_2eint(arma::mat& rys_root, AO& AO_i, AO& AO_j, AO& AO_k, AO& AO_l){
 
 }
 
+double lagrange_interpolate(double& X, double& flr, double& mid, double& cel){
+	// 3 point lagrange interpolation -- flr .. X .. mid .. cel
+	double flr_X = 0.01 * std::floor(X / 0.01);
+	double mid_X = flr_X + 0.01;
+	double cel_X = flr_X + 0.02;
+
+	return flr*(X-mid_X)*(X-cel_X)/0.0002 - mid*(X-flr_X)*(X-cel_X)/0.0001 + cel*(X-mid_X)*(X-flr_X)/0.0002;
+}
+
 
 void rysroot(arma::mat& rys_root, double& X, double& t1, double& t2, double& t3, double& w1, double& w2, double& w3){
 	// if X <= 30, read from table (X = 0 case is actually Legendre polynomial, rysroot.m doesn't compute that case)
 	// if X > 30, use Hermite polynomial n = 6
-	if (X <= 30){
+	if (X <= 29.99){
 		// read from table
 		int flr_index = std::floor(X / 0.01);
-		double flr_weight = (0.01 - (X - flr_index * 0.01)) / 0.01;
-		int cel_index = flr_index + 1;
-		double cel_weight = (0.01 - (cel_index * 0.01) + X) / 0.01;
+		int mid_index = flr_index + 1;
+		int cel_index = flr_index + 2;
 
-		t1 = rys_root(flr_index, 0)*flr_weight + rys_root(cel_index, 0)*cel_weight;
-		t2 = rys_root(flr_index, 1)*flr_weight + rys_root(cel_index, 1)*cel_weight;
-		t3 = rys_root(flr_index, 2)*flr_weight + rys_root(cel_index, 2)*cel_weight;
-		w1 = rys_root(flr_index, 3)*flr_weight + rys_root(cel_index, 3)*cel_weight;
-		w2 = rys_root(flr_index, 4)*flr_weight + rys_root(cel_index, 4)*cel_weight;
-		w3 = rys_root(flr_index, 5)*flr_weight + rys_root(cel_index, 5)*cel_weight;
+		t1 = lagrange_interpolate(X, rys_root(flr_index, 0), rys_root(mid_index, 0), rys_root(cel_index, 0));
+		t2 = lagrange_interpolate(X, rys_root(flr_index, 1), rys_root(mid_index, 1), rys_root(cel_index, 1));
+		t3 = lagrange_interpolate(X, rys_root(flr_index, 2), rys_root(mid_index, 2), rys_root(cel_index, 2));
+		w1 = lagrange_interpolate(X, rys_root(flr_index, 3), rys_root(mid_index, 3), rys_root(cel_index, 3));
+		w2 = lagrange_interpolate(X, rys_root(flr_index, 4), rys_root(mid_index, 4), rys_root(cel_index, 4));
+		w3 = lagrange_interpolate(X, rys_root(flr_index, 5), rys_root(mid_index, 5), rys_root(cel_index, 5));
+
+		t1 = t1*t1; t2 = t2*t2; t3 = t3*t3;
 		// std::cout << "flr_index, X, t1, w1 " << flr_index << " " << X << " " << t1 << " " << w1 << " " << std::endl;
 	} else { // X > 30
 		t1 = 0.436077412 * 0.436077412 / X;
@@ -332,7 +341,6 @@ double Ix_calc(double& t2, double& xi, double& xj, double& xk, double& xl, doubl
 double Ix_calc_ssss(double& t2, double& xi, double& xj, double& xk, double& xl, double& ai, double& aj, double& ak, double& al){
 	double A = ai + aj;
 	double B = ak + al;
-	double rho = A*B / (A+B);
 	double Gx = ai*aj/(ai+aj)*(xi-xj)*(xi-xj)+ak*al/(ak+al)*(xk-xl)*(xk-xl);
 
 	double G00 = M_PI / std::sqrt(A*B);
@@ -346,7 +354,6 @@ double Ix_calc_psss(double& t2, double& xi, double& xj, double& xk, double& xl, 
 	double xB = (ak*xk + al*xl) / (ak+al);
 	double A = ai + aj;
 	double B = ak + al;
-	double rho = A*B / (A+B);
 	double Gx = ai*aj/(ai+aj)*(xi-xj)*(xi-xj)+ak*al/(ak+al)*(xk-xl)*(xk-xl);
 
 	double C00 = (xA-xi) + B*(xB-xA)*t2/(A+B);
@@ -363,7 +370,6 @@ double Ix_calc_psps(double& t2, double& xi, double& xj, double& xk, double& xl, 
 	double xB = (ak*xk + al*xl) / (ak+al);
 	double A = ai + aj;
 	double B = ak + al;
-	double rho = A*B / (A+B);
 	double Gx = ai*aj/(ai+aj)*(xi-xj)*(xi-xj)+ak*al/(ak+al)*(xk-xl)*(xk-xl);
 
 	double C00 = (xA-xi) + B*(xB-xA)*t2/(A+B);
@@ -382,7 +388,6 @@ double Ix_calc_ppss(double& t2, double& xi, double& xj, double& xk, double& xl, 
 	double xB = (ak*xk + al*xl) / (ak+al);
 	double A = ai + aj;
 	double B = ak + al;
-	double rho = A*B / (A+B);
 	double Gx = ai*aj/(ai+aj)*(xi-xj)*(xi-xj)+ak*al/(ak+al)*(xk-xl)*(xk-xl);
 
 	double C00 = (xA-xi) + B*(xB-xA)*t2/(A+B);
@@ -402,7 +407,6 @@ double Ix_calc_ppps(double& t2, double& xi, double& xj, double& xk, double& xl, 
 	double xB = (ak*xk + al*xl) / (ak+al);
 	double A = ai + aj;
 	double B = ak + al;
-	double rho = A*B / (A+B);
 	double Gx = ai*aj/(ai+aj)*(xi-xj)*(xi-xj)+ak*al/(ak+al)*(xk-xl)*(xk-xl);
 
 	double C00 = (xA-xi) + B*(xB-xA)*t2/(A+B);
@@ -425,7 +429,6 @@ double Ix_calc_pppp(double& t2, double& xi, double& xj, double& xk, double& xl, 
 	double xB = (ak*xk + al*xl) / (ak+al);
 	double A = ai + aj;
 	double B = ak + al;
-	double rho = A*B / (A+B);
 	double Gx = ai*aj/(ai+aj)*(xi-xj)*(xi-xj)+ak*al/(ak+al)*(xk-xl)*(xk-xl);
 
 	double C00 = (xA-xi) + B*(xB-xA)*t2/(A+B);

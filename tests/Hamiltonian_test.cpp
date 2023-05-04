@@ -1,4 +1,4 @@
-#include  <iomanip>
+#include <iomanip>
 #include <armadillo>
 #include <Setup/Jobinfo.h>
 #include <basis/molecule_basis.h>
@@ -24,7 +24,7 @@ int run_Halmitonian(std::string test_case){
 
     // Read Pmat from file
     arma::mat Pa;
-    Pa.load(Pmat_name);
+    // Pa.load(Pmat_name);
 
     std::cout <<std::setprecision(15);
 
@@ -33,6 +33,8 @@ int run_Halmitonian(std::string test_case){
     if(ok != 0) return 1;
   
     size_t nbasis = MyMolBasis.get_basis_size();
+    Pa.set_size(nbasis, nbasis);
+    Pa.zeros();
     arma::mat H_core(nbasis,nbasis), Ga(nbasis,nbasis);
     myHamiltonian->eval_Hcore(H_core);
     myHamiltonian->eval_G(Pa, Ga);
@@ -50,8 +52,6 @@ int run_Halmitonian(std::string test_case){
     double Exchange = - arma::dot(Pa, Ka);
     std::cout << "Coulomb Energy is " << Coulomb << " hartree." << std::endl;
     std::cout << "Exchange Energy is " << Exchange << " hartree." << std::endl;
-
-
 
     return 0;
 }
