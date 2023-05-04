@@ -53,7 +53,7 @@ int TestFiles(std::string fin){
 int main(int argc, char *argv[])
 {
   return
-    TestFiles("C2H4.in", "CH2.out")|
-    TestFiles("C2H4.in")|
+    TestFiles("C2H4/C2H4.in", "C2H4/C2H4.out")|
+    TestFiles("C2H4/C2H4.in")|
     0;
 }

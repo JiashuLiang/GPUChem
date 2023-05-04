@@ -1,6 +1,7 @@
 set(TESTS
     Setup_test
     basis_test
+    Hamiltonian_test
     SCF_test
 )
 include_directories(${ARMADILLO_INCLUDE_DIRS})
