@@ -8,12 +8,12 @@
 using namespace std;
 
 
-int run_Halmitonian(std::string test_case){
+int run_Halmitonian(std::string test_case, std::string hamiltonian_name){
 
     std::string fin = test_case + "/" + test_case + ".in";
     std::string fout = test_case + "/" + test_case + ".out";
     std::string Pmat_name = test_case + "/Pmat.txt";
-    std::cout << "Input: " << fin << "\n";
+    std::cout << "Input: " << fin << " Hamiltonian: " << hamiltonian_name << "\n";
 
     JobInfo MyJob;
     if(MyJob.read_from_file(fin, fout))
@@ -22,10 +22,15 @@ int run_Halmitonian(std::string test_case){
     MyMolBasis.Construct_basis(MyJob.GetRem("basis"));
     // MyMolBasis.PrintAll();
 
-
     std::cout <<std::setprecision(15);
 
-    Hamiltonian* myHamiltonian = new HartreeFock_Rys(MyMolBasis, 1e-14);
+    Hamiltonian* myHamiltonian;
+    if(hamiltonian_name == "hf")
+      myHamiltonian = new HartreeFock_Rys(MyMolBasis, 1e-14);
+    else if(hamiltonian_name == "hf_gpu")
+      myHamiltonian = new HartreeFock_Rys_gpu(MyMolBasis, 1e-14);
+
+      
     int ok = myHamiltonian->init();
     if(ok != 0) return 1;
   
@@ -51,6 +56,7 @@ int run_Halmitonian(std::string test_case){
     double Exchange = - arma::dot(Pa, Ka);
     std::cout << "Coulomb Energy is " << Coulomb << " hartree." << std::endl;
     std::cout << "Exchange Energy is " << Exchange << " hartree." << std::endl;
+    std::cout << std::endl;
 
     return 0;
 }
@@ -59,6 +65,7 @@ int run_Halmitonian(std::string test_case){
 int main(int argc, char *argv[])
 {
   return
-    run_Halmitonian("C2H4")|
+    run_Halmitonian("C2H4", "hf")|
+    run_Halmitonian("C2H4", "hf_gpu")|
     0;
 }

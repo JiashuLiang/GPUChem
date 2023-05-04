@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.14)
-project(Integral C CXX)
+project(Integral C CXX )
 
 set(SRC
     hcore.cpp
     JKmat.cpp
     HartreeFock_Rys.cpp
+    HartreeFock_Rys_gpu.cu
 )
 
 add_library(integral ${SRC})
