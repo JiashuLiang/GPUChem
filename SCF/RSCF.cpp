@@ -1,6 +1,7 @@
 #include "RSCF.h"
 #include <armadillo>
 #include <iostream>
+#include <chrono>
 #include <integral/Hamiltonian.h>
 
 double hartree_to_ev = 27.211396641308;
@@ -25,14 +26,14 @@ RSCF::RSCF(Molecule_basis &m_molbasis_i, int max_it, double tolerence,
   // S.print("Overlap");
   
   //Initialize the Hamiltonian
-  if (hamiltonian_name == "HF")
+  if (hamiltonian_name == "hf")
     m_hamiltonian = new HartreeFock_Rys(m_molbasis, 1e-3 * tolerence);
   else
     m_hamiltonian = new HartreeFock_Rys(m_molbasis, 1e-3 * tolerence);
 
 
   //Initialize the SCF algorithm
-  if (scf_algorithm_name == "DIIS")
+  if (scf_algorithm_name == "diis")
     m_scf_algorithm = new RSCF_DIIS(this, max_it, tolerence, 4);
   else
     m_scf_algorithm = new RSCF_plain(this, max_it, tolerence);
@@ -56,6 +57,8 @@ RSCF::RSCF(Molecule_basis &m_molbasis_i, int max_it, double tolerence,
 
 int RSCF::init()
 {
+  auto start_time_t = std::chrono::steady_clock::now();
+
   //Initialize the Hamiltonian
   m_hamiltonian->init();
 
@@ -79,14 +82,24 @@ int RSCF::init()
     return 1;
   }
   // H_core.print("H_core");
+  int ok =  m_scf_algorithm->init();
+  auto end_time_t = std::chrono::steady_clock::now();
+  std::chrono::duration<double> elapsed_seconds = end_time_t - start_time_t;
+  std::cout << "SCF initialization is finished in " << elapsed_seconds.count() << " seconds." << std::endl;
 
-  return m_scf_algorithm->init();
+  return ok;
 }
 
 
 int RSCF::run()
 {
-  return m_scf_algorithm->run();
+  auto start_time_t = std::chrono::steady_clock::now();
+  int ok = m_scf_algorithm->run();
+  auto end_time_t = std::chrono::steady_clock::now();
+  std::chrono::duration<double> elapsed_seconds = end_time_t - start_time_t;
+  std::cout << "SCF calculation is finished in " << elapsed_seconds.count() << " seconds." << std::endl;
+
+  return ok;
 }
 
 void RSCF::UpdateEnergy(){

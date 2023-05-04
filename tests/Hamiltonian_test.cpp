@@ -22,9 +22,6 @@ int run_Halmitonian(std::string test_case){
     MyMolBasis.Construct_basis(MyJob.GetRem("basis"));
     // MyMolBasis.PrintAll();
 
-    // Read Pmat from file
-    arma::mat Pa;
-    // Pa.load(Pmat_name);
 
     std::cout <<std::setprecision(15);
 
@@ -33,8 +30,10 @@ int run_Halmitonian(std::string test_case){
     if(ok != 0) return 1;
   
     size_t nbasis = MyMolBasis.get_basis_size();
-    Pa.set_size(nbasis, nbasis);
-    Pa.zeros();
+    // Read Pmat from file
+    arma::mat Pa(nbasis, nbasis);
+    Pa.load(Pmat_name);
+    
     arma::mat H_core(nbasis,nbasis), Ga(nbasis,nbasis);
     myHamiltonian->eval_Hcore(H_core);
     myHamiltonian->eval_G(Pa, Ga);

@@ -7,6 +7,10 @@
 #include <filesystem>
 #include "Jobinfo.h"
 
+// set default values of rem
+std::map<std::string, std::string> rem_default { {"basis", "sto3g"}, {"scf_convergence", "7"},
+           {"scf_max_iter", "100"}, {"scf_algorithm", "diis"}, {"method", "hf"}};
+
 int JobInfo::read_from_file(std::string &fin, std::string &fout, std::string &scratch){
     fin_name = fin;
     fout_name = fout;
@@ -156,9 +160,13 @@ std::string JobInfo::GetRem(const std::string &key){
     if (it != REM_map.end()){
         return it->second;
     }else{
-        std::cerr << "Error: The key " << key <<" does not exist in the REM section!\n";
-        //return empty string
-        return "";
+        auto it_default = rem_default.find(key);
+        if (it_default != rem_default.end()){
+            return it_default->second;
+        }else
+            std::cerr << "Error: The key " << key <<" does not exist in the REM section!\n";
+            //return empty string
+            return "";
     }
 }
 

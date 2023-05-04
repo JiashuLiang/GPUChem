@@ -22,7 +22,7 @@ class RSCF: public SCF{
 
 
         RSCF(Molecule_basis &m_molbasis_i, int max_it, double tolerence, 
-            const std::string hamiltonian_name = "HF", const std::string scf_algorithm_name = "plain");
+            const std::string hamiltonian_name = "HF", const std::string scf_algorithm_name = "DIIS");
         ~RSCF();
         virtual int init();
         virtual int run();
@@ -61,7 +61,7 @@ class RSCF_DIIS: public SCF_algorithm{
         virtual int init();
         virtual int run();
         RSCF_DIIS() = default;
-        RSCF_DIIS(RSCF *m_scf_i, int max_it, double tolerence, int DIIS_circle_i = 4);
+        RSCF_DIIS(RSCF *m_scf_i, int max_it, double tolerence, int DIIS_circle_i = 5);
 
         void DIIS(arma::mat &e, arma::vec &c);
 };
