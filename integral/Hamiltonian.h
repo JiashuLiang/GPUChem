@@ -24,6 +24,8 @@ class Hamiltonian{
         virtual int eval_Hcore(arma::mat &H_mat)=0;
         // evaluate the G matrix (two-electron part)
         virtual int eval_G(arma::mat &P_mat, arma::mat &G_mat)=0;
+        virtual int eval_J(arma::mat &P_mat, arma::mat &J_mat)=0;
+        virtual int eval_K(arma::mat &P_mat, arma::mat &K_mat)=0;
 };
 
 
@@ -41,6 +43,8 @@ class HartreeFock_Rys: public Hamiltonian{
         virtual int eval_Hcore(arma::mat &H_mat);
         // evaluate the G matrix (two-electron part)
         virtual int eval_G(arma::mat &P_mat, arma::mat &G_mat);
+        virtual int eval_J(arma::mat &P_mat, arma::mat &J_mat);
+        virtual int eval_K(arma::mat &P_mat, arma::mat &K_mat);
 };
 
 

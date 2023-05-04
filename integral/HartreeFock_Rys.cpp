@@ -38,3 +38,10 @@ int HartreeFock_Rys::eval_G(arma::mat &P_mat, arma::mat &G_mat){
   // evaluate the G matrix (two-electron part)
 	return eval_Gmat_RSCF(m_molbasis, rys_root, Schwarz_mat, shreshold, P_mat, G_mat);
 }
+
+int HartreeFock_Rys::eval_J(arma::mat &P_mat, arma::mat &J_mat){
+	return eval_Jmat_RSCF(m_molbasis, rys_root, Schwarz_mat, shreshold, P_mat, J_mat);
+}
+int HartreeFock_Rys::eval_K(arma::mat &P_mat, arma::mat &K_mat){
+	return eval_Kmat_RSCF(m_molbasis, rys_root, Schwarz_mat, shreshold, P_mat, K_mat);
+}

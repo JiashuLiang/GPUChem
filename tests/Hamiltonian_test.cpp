@@ -40,10 +40,16 @@ int run_Halmitonian(std::string test_case){
     double E_one_ele = 0, E_two_ele = 0;
     E_two_ele = arma::dot(Pa, Ga);
     E_one_ele = arma::dot(Pa, H_core)* 2;
+    std::cout << "One Electron Energy is " << E_one_ele << " hartree." << std::endl;
+    std::cout << "Two electron Energy is " << E_two_ele << " hartree." << std::endl;
 
-    
-  std::cout << "One Electron Energy is " << E_one_ele << " hartree." << std::endl;
-  std::cout << "Two electron Energy is " << E_two_ele << " hartree." << std::endl;
+    arma::mat Ja(nbasis,nbasis), Ka(nbasis,nbasis);
+    myHamiltonian->eval_J(Pa, Ja);
+    myHamiltonian->eval_K(Pa, Ka);
+    double Coulomb = arma::dot(Pa, Ja) * 2;
+    double Exchange = - arma::dot(Pa, Ka);
+    std::cout << "Coulomb Energy is " << Coulomb << " hartree." << std::endl;
+    std::cout << "Exchange Energy is " << Exchange << " hartree." << std::endl;
 
 
 
