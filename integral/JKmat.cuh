@@ -1,8 +1,9 @@
 #if !defined JKMAT_H
 #define JKMAT_H
 
-#include <basis/molecule_basis.h>
+#define ARMA_ALLOW_FAKE_GCC
 #include <armadillo>
+#include <basis/molecule_basis.h>
 #include <math.h>
 
 int eval_Gmat_RSCF(Molecule_basis& system, arma::mat &rys_root, arma::mat& Schwarz_mat, double schwarz_tol, arma::mat &Pa_mat, arma::mat &G_mat);

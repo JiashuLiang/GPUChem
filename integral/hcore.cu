@@ -1,8 +1,7 @@
 #define _USE_MATH_DEFINES
-#include "hcore.h"
+#include "hcore.cuh"
 #include <basis/molecule_basis.h>
 #include <basis/util.h>
-#include <armadillo>
 #include <math.h>
 #include <assert.h>
 

@@ -2,6 +2,7 @@
 #define HAMILTONIAN_H
 
 
+#define ARMA_ALLOW_FAKE_GCC
 #include <armadillo>
 #include <basis/molecule_basis.h>
 

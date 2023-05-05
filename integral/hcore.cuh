@@ -1,8 +1,9 @@
 #if !defined HCORE_H
 #define HCORE_H
 
-#include <basis/molecule_basis.h>
+#define ARMA_ALLOW_FAKE_GCC
 #include <armadillo>
+#include <basis/molecule_basis.h>
 #include <math.h>
 
 // Primary functions

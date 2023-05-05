@@ -1,6 +1,6 @@
 #include "Hamiltonian.h"
-#include "hcore.h"
-#include "JKmat.h"
+#include "hcore.cuh"
+#include "JKmat.cuh"
 #include <filesystem>
 
 
