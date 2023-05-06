@@ -1,7 +1,28 @@
-#include "Hamiltonian.h"
+#include "HartreeFock_Rys_gpu.cuh"
 #include "hcore.cuh"
 #include "JKmat.cuh"
 #include <filesystem>
+
+
+__global__ void sayHello(){
+  printf("Hello from GPU!\n");
+}
+
+__global__ void printAOR(double * R ){
+    int id = threadIdx.x + blockIdx.x * blockDim.x;
+  printf("%d R( %1.2f, %1.2f, %1.2f)\n", id , R[id*3 + 0], R[id*3 + 1], R[id*3 + 2]);
+}
+__global__ void printEffectivecharge(int * R ){
+    int id = threadIdx.x + blockIdx.x * blockDim.x;
+  printf("%d Effectivecharge %d\n", id , R[id]);
+}
+
+__global__ void printmAOs(AOGPU* mAOs){
+    int id = threadIdx.x + blockIdx.x * blockDim.x;
+  printf("%d info, R( %1.2f, %1.2f, %1.2f), with angular momentum: %x %x %x, alpha:( %1.2f, %1.2f, %1.2f), dcoef( %1.2f, %1.2f, %1.2f)\n", id,
+        mAOs[id].R0[0], mAOs[id].R0[1], mAOs[id].R0[2], mAOs[id].lmn[0], mAOs[id].lmn[1], mAOs[id].lmn[2],
+        mAOs[id].alpha[0], mAOs[id].alpha[1], mAOs[id].alpha[2], mAOs[id].d_coe[0], mAOs[id].d_coe[1], mAOs[id].d_coe[2]);
+}
 
 
 int HartreeFock_Rys_gpu::init(){
@@ -25,11 +46,22 @@ int HartreeFock_Rys_gpu::init(){
 
   return 0;
 }
+
+
+
 int HartreeFock_Rys_gpu::eval_OV(arma::mat &OV_mat){
+
     return eval_OVmat(m_molbasis, OV_mat);
 }
 
 int HartreeFock_Rys_gpu::eval_Hcore(arma::mat &H_mat){
+    //m_molbasis.PrintAll();
+    
+    //std::cout<< "\nNow print on GPU\n";
+
+    //printAOR<<<2,2>>>(m_molbasis_gpu.Atom_coords);
+    //printEffectivecharge<<<2,2>>>(m_molbasis_gpu.effective_charges);
+    //printmAOs<<<2,6>>>(m_molbasis_gpu.mAOs);
   // evaluate the H core matrix (one-electron part)
     return eval_Hcoremat(m_molbasis, H_mat);
 }

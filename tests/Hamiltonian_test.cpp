@@ -3,6 +3,7 @@
 #include <Setup/Jobinfo.h>
 #include <basis/molecule_basis.h>
 #include <integral/Hamiltonian.h>
+#include <integral/HartreeFock_Rys_gpu.cuh>
 
 
 using namespace std;
