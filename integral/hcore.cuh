@@ -1,15 +1,18 @@
 #if !defined HCORE_CUH
 #define HCORE_CUH
 
-#include <basis/molecule_basis.h>
+#include <basis/molecule_basis.cuh>
 #include <armadillo>
 #include <math.h>
 
 // Primary functions
+int eval_Hcoremat(Molecule_basisGPU& system, arma::mat &H_mat);
 int eval_Hcoremat(Molecule_basis& system, arma::mat &H_mat);
+
 int eval_OVmat(Molecule_basis& system, arma::mat &S_mat);
 
 size_t sort_AOs(std::vector<AO> &unsorted_AOs, std::vector<AO> &sorted_AOs, arma::uvec &sorted_indices);
+size_t sort_AOs(AOGPU* unsorted_AOs, const int nbsf, std::vector<AOGPU> &sorted_AOs, arma::uvec &sorted_indices);
 void construct_S(arma::mat &Smat, std::vector<AO> &mAOs, size_t p_start_ind);
 void construct_V(arma::mat &Vmat, std::vector<AO> &mAOs, size_t p_start_ind, const Molecule &mol);
 void construct_T(arma::mat &Tmat, std::vector<AO> &mAOs, size_t p_start_ind);
@@ -18,13 +21,13 @@ void construct_V_unsorted(arma::mat &Vmat, std::vector<AO> &mAOs, const Molecule
 void construct_T_unsorted(arma::mat &Tmat, std::vector<AO> &mAOs);
 
 
-double eval_Smunu(AO &mu, AO &nu);
-double eval_Tmunu(AO &mu, AO &nu);
-double eval_Vmunu(AO &mu, AO &nu, const Molecule &mol);
+__device__ double eval_Smunu(AOGPU &mu, AOGPU &nu);
+__device__ double eval_Tmunu(AOGPU &mu, AOGPU &nu);
+__device__ double eval_Vmunu(AOGPU &mu, AOGPU &nu, const Molecule_basisGPU &mol);
 
 // math utils
-int factorial (int n);
-int nCk (int n, int k);
+__device__ int factorial (int n);
+__device__ int nCk (int n, int k);
 
 // S and T helper functions 
 __device__ arma::vec gaussian_product_center(double alpha, arma::vec &A, double beta, arma::vec &B);
@@ -51,7 +54,7 @@ __device__ double nuclear_attraction(arma::vec &A,int l1, int m1, int n1,double 
 // additional GPU funcs
 
 
-__device__ void construct_T_block(double* Tmat,  AO* mAOs, size_t mu_start_ind, size_t nu_start_ind size_t num_mu, size_t num_nu);
-__device__ void construct_V_block(double* Vmat,  AO* mAOs, size_t mu_start_ind, size_t nu_start_ind size_t num_mu, size_t num_nu, const Molecule &mol);
-__global__ void construct_TV(double* T_mat_gpu, double* V_mat_gpu, AO* mAOs, size_t nbsf, size_t p_start_ind, const Molecule mol);
+__device__ void construct_T_block(double* Tmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf);
+__device__ void construct_V_block(double* Vmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf, const Molecule_basisGPU &mol);
+__global__ void construct_TV(double* T_mat_gpu, double* V_mat_gpu, AOGPU* mAOs, size_t nbsf, size_t p_start_ind, const Molecule_basisGPU mol);
 #endif // HCORE_CUH
