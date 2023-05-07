@@ -1,6 +1,5 @@
-#include "JKmat.h"
+#include "JKmat.cuh"
 #include <basis/molecule_basis.h>
-#include <armadillo>
 #include <cmath>
 
 // calculates (i j | k l), each of those is a CGTO basis function

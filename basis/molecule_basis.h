@@ -32,7 +32,9 @@ class Molecule_basis{
         // For get something as matrix for better performance
         // void get_something(arma::mat &Something);
 
-
+        size_t get_basis_size(){
+            return mAOs.size();
+        }
 
         bool HasNonPairElectron(){
             return (num_alpha_ele != num_beta_ele);

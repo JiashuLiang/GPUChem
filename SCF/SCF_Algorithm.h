@@ -1,5 +1,5 @@
-#if !defined SCF_H
-#define SCF_H
+#if !defined SCF_ALGORITHM_H
+#define SCF_ALGORITHM_H
 
 
 #include <armadillo>
@@ -7,29 +7,10 @@
 #include <basis/molecule_basis.h>
 
 
-class SCF{
-    public:
-        virtual int init()=0;
-        virtual int run()=0;
-        // return density matrix's pointer
-        virtual double * getP_ptr()=0;
-        virtual double getEnergy()=0;
-        virtual int getnbasis()=0;
-};
-
-
-
-
-class SCF_algorithm{
-    public:
-        virtual int init()=0;
-        virtual int run()=0;
-};
-
 // class USCF: public SCF{
 //     private:
 //         Molecule_basis &m_molbasis;
-//         int nbasis, num_atoms, max_iter;
+//         int dim, num_atoms, max_iter;
 //         double tol;
 //         arma::mat S_mat;
 //         arma::mat H_core;
@@ -52,4 +33,4 @@ class SCF_algorithm{
 
 
 
-#endif // SCF_H
+#endif // SCF_ALGORITHM_H

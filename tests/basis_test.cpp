@@ -55,6 +55,6 @@ int main(int argc, char *argv[])
   return
     Basis_reading("sto3g")|
     Basis_reading("H2.in", "H2.out")|
-    Basis_reading("C2H4.in", "C2H4.out")|
+    Basis_reading("C2H4/C2H4.in", "C2H4.out")|
     0;
 }

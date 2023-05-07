@@ -74,7 +74,7 @@ double Overlap_onedim(double xa, double xb, double alphaa, double alphab, int la
   return result;
 }
 
-double Overlap_3d(arma::vec &Ra, arma::vec &Rb, double alphaa, double alphab, arma::uvec &lmna, arma::uvec &lmnb)
+double Overlap_3d(arma::vec &Ra, arma::vec &Rb, double alphaa, double alphab, arma::Col<unsigned int> &lmna, arma::Col<unsigned int> &lmnb)
 {
   double Overlap = Overlap_onedim(Ra(0), Rb(0), alphaa, alphab, lmna(0), lmnb(0)) *
                    Overlap_onedim(Ra(1), Rb(1), alphaa, alphab, lmna(1), lmnb(1)) *

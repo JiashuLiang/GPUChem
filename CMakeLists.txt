@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(GPUChem LANGUAGES C CXX)
+project(GPUChem LANGUAGES C CXX CUDA)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
@@ -33,4 +33,5 @@ add_subdirectory(integral)
 add_subdirectory(SCF)
 add_subdirectory(tests)
 
-# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_80")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_80")
+set(CMAKE_CUDA_ARCHITECTURES 80)
