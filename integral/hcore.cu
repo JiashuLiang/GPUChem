@@ -1,12 +1,18 @@
 #define _USE_MATH_DEFINES
-#include "hcore.cuh"
+#include "hcore.h"
 #include <basis/molecule_basis.h>
 #include <basis/util.h>
+#include <armadillo>
 #include <math.h>
 #include <assert.h>
+#include <cuda.h>
+
+#define NUM_THREADS 256
+#define NUM_BLOCKS (nbsf*nbsf/NUM_THREADS) + 1;
 
 #define max(a,b) ((a)>(b)?(a):(b))
-
+#define CHECK_TID if (TID >= num_mu*num_nu) return;
+#define TID (threadIdx.x + blockIdx.x * blockDim.x)
 // vnn.C
 int eval_OVmat(Molecule_basis& system, arma::mat &S_mat){
     const int nbsf = system.mAOs.size();
@@ -66,7 +72,58 @@ int eval_Hcoremat(Molecule_basis& system, arma::mat &H_mat){
     return 0;
 }
 
+int eval_Hcoremat_gpu(Molecule_basis& system, arma::mat &H_mat){
+    const size_t nbsf = system.mAOs.size();
+    H_mat.set_size(nbsf,nbsf);
+    arma::mat T_mat(nbsf,nbsf), V_mat(nbsf,nbsf);
+    
+    T_mat.zeros();
+    V_mat.zeros();
 
+    std::vector<AO> sorted_AOs;
+    arma::uvec sorted_indices;
+    
+    // Sort AOs by type
+    size_t p_start_ind = sort_AOs(system.mAOs, sorted_AOs, sorted_indices);
+
+    arma::uvec undo_sorted_indices = arma::sort_index(sorted_indices);
+
+    // Perform construction of H, sorted into blocks of ss, sp, ps,pp
+    
+    // Copy Sorted AOs. In hindsight, probably unnecessary and couldve just copied via construct_TV;
+    AO* mAO_array = &sorted_AOs[0]; 
+    AO* mAO_array_gpu;
+    cudaMalloc((void**)&mAO_array_gpu, nbsf * sizeof(AO));
+    cudaMemcpy(mAO_array_gpu, mAO_array, nbsf * sizeof(AO), cudaMemcpyHostToDevice);
+
+    // Copy T and V matrices
+    double* T_mat_ptr = T_mat.memptr();
+    double* V_mat_ptr = T_mat.memptr();
+    double* T_mat_gpu, V_mat_gpu;
+
+    cudaMalloc((void**)&T_mat_gpu, nbsf * nbsf* sizeof(double));
+    cudaMemcpy(T_mat_gpu, T_mat_ptr, nbsf * nbsf * sizeof(double), cudaMemcpyHostToDevice);
+
+    cudaMalloc((void**)&V_mat_gpu, nbsf * nbsf* sizeof(double));
+    cudaMemcpy(V_mat_gpu, V_mat_ptr, nbsf * nbsf * sizeof(double), cudaMemcpyHostToDevice);
+    
+    construct_TV<<<NUM_BLOCKS,NUM_THREADS>>>(T_mat_gpu,  V_mat_gpu, mAO_array_gpu, nbsf, p_start_ind,system.m_mol);
+    cudaMemcpy(T_mat_ptr, T_mat_gpu,  nbsf * nbsf * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(V_mat_ptr, V_mat_gpu, nbsf * nbsf * sizeof(double), cudaMemcpyDeviceToHost);
+
+    // construct_V(V_mat, sorted_AOs, p_start_ind, system.m_mol);
+    // construct_T(T_mat, sorted_AOs, p_start_ind);
+
+    
+    H_mat = T_mat + V_mat;
+
+    // T_mat.print("Printing T mat ");
+    // V_mat.print("Printing V mat ");
+    // return H_mat to its original order.
+    H_mat = H_mat(undo_sorted_indices, undo_sorted_indices);
+
+    return 0;
+}
 size_t sort_AOs(std::vector<AO> &unsorted_AOs, std::vector<AO> &sorted_AOs, arma::uvec &sorted_indices){
     // sorts AOs, s orbitals first then p orbitals next.
     // input: unsorted_AOs
@@ -165,6 +222,7 @@ void construct_V(arma::mat &Vmat, std::vector<AO> &mAOs, size_t p_start_ind, con
     }
 
 }
+
 void construct_T(arma::mat &Tmat, std::vector<AO> &mAOs, size_t p_start_ind){
     // for (size_t mu = 0; mu < Tmat.n_rows; mu++){
     //     for (size_t nu = 0; nu < Tmat.n_cols; nu++){
@@ -203,6 +261,44 @@ void construct_T(arma::mat &Tmat, std::vector<AO> &mAOs, size_t p_start_ind){
 }
 
 
+__device__ void construct_T_block(double* Tmat,  AO* mAOs, size_t mu_start_ind, size_t nu_start_ind size_t num_mu, size_t num_nu){
+    size_t tid = TID;
+    CHECK_TID // return if thread num exceeds num of elements in block
+    // ss
+    size_t mu = tid % num_mu;
+    size_t nu = tid / num_nu;
+
+    arma::mat Tmat_block(Tmat + mu_start_ind + mu_start_ind*nbsf, num_mu, num_nu, false, true);
+    Tmat_block(mu,nu) = eval_Tmunu(mAOs[mu], mAOs[nu]);
+}
+
+__device__ void construct_V_block(double* Vmat,  AO* mAOs, size_t mu_start_ind, size_t nu_start_ind size_t num_mu, size_t num_nu, const Molecule &mol){
+    size_t tid = TID;
+    CHECK_TID // return if thread num exceeds num of elements in block
+    // ss
+    size_t mu = tid % num_mu;
+    size_t nu = tid / num_nu;
+
+    arma::mat Vmat_block(Vmat + mu_start_ind + mu_start_ind*nbsf, num_mu, num_nu, false, true);
+    Vmat_block(mu,nu) = eval_Vmunu(mAOs + mu_start_ind, mAOs + nu_start_ind, mol);
+}
+
+
+__global__ void construct_TV(double* T_mat_gpu, double* V_mat_gpu, AO* mAOs, size_t nbsf, size_t p_start_ind, const Molecule mol){
+
+    size_t p_dim = nbsf - p_start_ind;
+
+    construct_T_block(double* Tmat,  AO* mAOs, 0, 0, p_start_ind, p_start_ind); // ss
+    construct_T_block(double* Tmat,  AO* mAOs, p_start_ind, 0, p_dim, p_start_ind); // ps
+    construct_T_block(double* Tmat,  AO* mAOs, 0, p_start_ind, p_start_ind, p_dim); // sp
+    construct_T_block(double* Tmat,  AO* mAOs, p_start_ind, p_start_ind, p_dim, p_dim); // pp
+
+    construct_V_block(double* Vmat,  AO* mAOs, 0, 0, p_start_ind, p_start_ind, mol); // ss
+    construct_V_block(double* Vmat,  AO* mAOs, p_start_ind, 0, p_dim, p_start_ind), mol; // ps
+    construct_V_block(double* Vmat,  AO* mAOs, 0, p_start_ind, p_start_ind, p_dim, mol); // sp
+    construct_V_block(double* Vmat,  AO* mAOs, p_start_ind, p_start_ind, p_dim, p_dim, mol); // pp
+
+}
 // UNSORTED FUNCTIONS
 void construct_S_unsorted(arma::mat &Smat, std::vector<AO> &mAOs){
     // Handle ss, then sp, then pp.
@@ -238,7 +334,7 @@ void construct_T_unsorted(arma::mat &Tmat, std::vector<AO> &mAOs){
 
 
 
-double eval_Smunu(AO &mu, AO &nu){
+__device__ double eval_Smunu(AO &mu, AO &nu){
     assert(mu.alpha.size()==mu.d_coe.size() && nu.alpha.size()==nu.d_coe.size()); // This should be true?
     
     size_t mu_no_primitives = mu.alpha.size();
@@ -270,7 +366,7 @@ double eval_Smunu(AO &mu, AO &nu){
 }
 
 
-double eval_Tmunu(AO &mu, AO &nu){
+__device__ double eval_Tmunu(AO &mu, AO &nu){
     assert(mu.alpha.size()==mu.d_coe.size() && nu.alpha.size()==nu.d_coe.size()); // This should be true?
     
     size_t mu_no_primitives = mu.alpha.size();
@@ -300,7 +396,9 @@ double eval_Tmunu(AO &mu, AO &nu){
     return total;
 }
 
-double eval_Vmunu(AO &mu, AO &nu, const Molecule &mol){
+
+
+__device__ double eval_Vmunu(AO &mu, AO &nu, const Molecule &mol){
     // nuclear attraction
     assert(mu.alpha.size()==mu.d_coe.size() && nu.alpha.size()==nu.d_coe.size()); // This should be true?
     
@@ -336,7 +434,7 @@ double eval_Vmunu(AO &mu, AO &nu, const Molecule &mol){
 }
 
 
-double gammln(double xx){
+__device__ double gammln(double xx){
     // From Numerical Recipes, 6.1 and 6.2
     // Returns the value ln[Γ(xx)] for xx > 0.
     // Internal arithmetic will be done in double precision, a nicety that you can omit if five-figure accuracy is good enough.
@@ -353,7 +451,7 @@ double gammln(double xx){
     return -tmp+log(2.5066282746310005*ser/x);
 }
 
-void gser(double *gamser, double a, double x, double *gln) {
+__device__ void gser(double *gamser, double a, double x, double *gln) {
     // From Numerical Recipes, 6.1 and 6.2
     // Returns the incomplete gamma function P (a, x) evaluated by its series representation as gamser Also returns ln Γ(a) as gln.
 
@@ -385,7 +483,7 @@ void gser(double *gamser, double a, double x, double *gln) {
     }
 }
 
-void gcf(double *gammcf, double a, double x, double *gln){
+__device__ void gcf(double *gammcf, double a, double x, double *gln){
     // From Numerical Recipes, 6.1 and 6.2
     // Returns the incomplete gamma function Q(a, x) evaluated by its continued fraction representation as gammcf. Also returns ln Γ(a) as gln.
     // double gammln(double xx);
@@ -419,7 +517,7 @@ void gcf(double *gammcf, double a, double x, double *gln){
     *gammcf = exp(-x+a*log(x)-(*gln))*h; //Put factors in front.
 }
 
-double gammp(double a, double x){
+__device__ double gammp(double a, double x){
     // Returns the incomplete gamma function P (a, x). From Numerical Recipes, section 6.1 and 6.2
     double gam, gamc, gln;
     if (x < 0.0 || a <= 0.0) throw std::runtime_error("Invalid arguments in routine gammp");
@@ -434,7 +532,7 @@ double gammp(double a, double x){
     return exp(gln)*gam;
 }
 
-double Fgamma(int m, double x){
+__device__ double Fgamma(int m, double x){
     // Incomplete Gamma Function
     double SMALL=1e-12;
     double m_d = (double) m; // convert to double explicitly, prolly notneeded
@@ -444,20 +542,20 @@ double Fgamma(int m, double x){
     return 0.5*pow(x,-m_d-0.5)*gammp(m_d+0.5,x);
 }
 
-int factorial (int n){
+__device__ int factorial (int n){
     return (n == 1 || n == 0) ? 1 : factorial(n - 1) * n;
 }
 
-int nCk (int n, int k){
+__device__ int nCk (int n, int k){
     return factorial(n)/(factorial(k) * factorial(n-k));
 }
 
-arma::vec gaussian_product_center(double alpha, arma::vec &A, double beta, arma::vec &B){
+__device__ arma::vec gaussian_product_center(double alpha, arma::vec &A, double beta, arma::vec &B){
     //computes the new gaussian center P.
     return (alpha*A + beta*B)/(alpha + beta);
 }
 
-double poly_binom_expans_terms(int n, int ia, int ib, double PminusA_1d, double PminusB_1d){
+__device__ double poly_binom_expans_terms(int n, int ia, int ib, double PminusA_1d, double PminusB_1d){
     // computes the binomial expansion for the terms where ia + ib = n.
     double total = 0.0;
 
@@ -469,7 +567,7 @@ double poly_binom_expans_terms(int n, int ia, int ib, double PminusA_1d, double 
     return total;
 }
 
-double overlap_1d(int l1, int l2, double PminusA_1d, double PminusB_1d, double gamma){
+__device__ double overlap_1d(int l1, int l2, double PminusA_1d, double PminusB_1d, double gamma){
     double total  = 0.0;
     for (int i = 0; i < (1+ int(std::floor((l1+l2)/2))); i++){
         total += poly_binom_expans_terms(2*i, l1, l2,PminusA_1d, PminusB_1d )* DoubleFactorial(2*i-1)/pow(2*gamma, i);
@@ -478,7 +576,7 @@ double overlap_1d(int l1, int l2, double PminusA_1d, double PminusB_1d, double g
 
 }
 
-double overlap(arma::vec A,  int l1, int m1, int n1,double alpha, arma::vec B, int l2, int m2, int n2,double beta ){
+__device__ double overlap(arma::vec A,  int l1, int m1, int n1,double alpha, arma::vec B, int l2, int m2, int n2,double beta ){
     double gamma = alpha + beta;
     arma::vec P = gaussian_product_center(alpha, A, beta, B);
 
@@ -490,7 +588,7 @@ double overlap(arma::vec A,  int l1, int m1, int n1,double alpha, arma::vec B, i
     return prefactor * sx * sy * sz;
 }
 
-double kinetic(arma::vec A,int l1, int m1, int n1,double alpha, arma::vec B, int l2, int m2, int n2, double beta){
+__device__ double kinetic(arma::vec A,int l1, int m1, int n1,double alpha, arma::vec B, int l2, int m2, int n2, double beta){
     // Formulation from JPS (21) 11, Nov 1966 by H Taketa et. al
 
     double term0 = beta*(2*(l2+m2+n2)+3)*overlap(A,l1,m1,n1,alpha,B,l2,m2,n2,beta);
@@ -507,14 +605,14 @@ double kinetic(arma::vec A,int l1, int m1, int n1,double alpha, arma::vec B, int
 
 
 
-double A_term(int i, int r, int u, int l1, int l2,double PAx, double PBx, double CPx, double gamma){
+__device__ double A_term(int i, int r, int u, int l1, int l2,double PAx, double PBx, double CPx, double gamma){
 
     return pow(-1,i)*poly_binom_expans_terms(i,l1,l2,PAx,PBx)*\
            pow(-1,u)*factorial(i)*pow(CPx,i-2*r-2*u)*\
            pow(0.25/gamma,r+u)/factorial(r)/factorial(u)/factorial(i-2*r-2*u);
 }
 
-arma::vec A_tensor(int l1, int l2, double PA, double PB, double CP, double g){
+__device__ arma::vec A_tensor(int l1, int l2, double PA, double PB, double CP, double g){
     int Imax = l1+l2+1;
     arma::vec A(Imax);
     A.zeros();
@@ -530,7 +628,7 @@ arma::vec A_tensor(int l1, int l2, double PA, double PB, double CP, double g){
     return A;
 
 }
-double nuclear_attraction(arma::vec &A,int l1, int m1, int n1,double alpha, arma::vec &B, int l2, int m2, int n2,double beta, arma::vec &C){
+__device__ double nuclear_attraction(arma::vec &A,int l1, int m1, int n1,double alpha, arma::vec &B, int l2, int m2, int n2,double beta, arma::vec &C){
     // Formulation from JPS (21) 11, Nov 1966 by H Taketa et. al
     
     double gamma = alpha + beta;
