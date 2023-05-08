@@ -20,64 +20,50 @@
 #define max(a,b) ((a)>(b)?(a):(b))
 #define CHECK_TID if (TID >= num_mu*num_nu) return;
 #define TID (threadIdx.x + blockIdx.x * blockDim.x)
+
+
+
 // vnn.C
-int eval_OVmat(Molecule_basis& system, arma::mat &S_mat){
-    const int nbsf = system.mAOs.size();
+int eval_OVmat(Molecule_basisGPU& system, arma::mat &S_mat){
+    const size_t nbsf = system.num_ao;
     S_mat.set_size(nbsf,nbsf);
     S_mat.zeros();
 
-    std::vector<AO> sorted_AOs;
+    std::vector<AOGPU> sorted_AOs;
     arma::uvec sorted_indices;
     
-    // Sort AOs by type
-    size_t p_start_ind = sort_AOs(system.mAOs, sorted_AOs, sorted_indices);
-
+    // Sort AOs by type. First, copy AOs from the device
+    AOGPU *unsorted_AOs = new AOGPU[nbsf];
+    cudaMemcpy(unsorted_AOs, system.mAOs, nbsf*sizeof(AOGPU), cudaMemcpyDeviceToHost);
+    size_t p_start_ind = sort_AOs(unsorted_AOs, nbsf, sorted_AOs, sorted_indices);
     arma::uvec undo_sorted_indices = arma::sort_index(sorted_indices);
 
-    // Perform construction of S, sorted into blocks of ss, sp, ps,pp
-    construct_S(S_mat, sorted_AOs, p_start_ind);
+    // Perform construction of H, sorted into blocks of ss, sp, ps,pp
+    
+    // Copy Sorted AOs. In hindsight, probably unnecessary and couldve just copied via construct_TV;
+    AOGPU* mAO_array = &sorted_AOs[0]; 
+    AOGPU* mAO_array_gpu;
+    cudaMalloc((void**)&mAO_array_gpu, nbsf * sizeof(AOGPU));
+    cudaMemcpy(mAO_array_gpu, mAO_array, nbsf * sizeof(AOGPU), cudaMemcpyHostToDevice);
 
-    // return H_mat to its original order.
+    // Copy Smatrices
+    double *S_mat_ptr = S_mat.memptr();
+    double *S_mat_gpu;
+
+    cudaMalloc((void**)&S_mat_gpu, nbsf * nbsf* sizeof(double));
+    cudaMemcpy(S_mat_gpu, S_mat_ptr, nbsf * nbsf * sizeof(double), cudaMemcpyHostToDevice);
+
+    // MARKER
+    // Perform construction of S, sorted into blocks of ss, sp, ps,pp
+    int num_blocks = (nbsf * nbsf /NUM_THREADS)+ 1;
+    // construct_S(S_mat, sorted_AOs, p_start_ind);
+    construct_S<<<num_blocks,NUM_THREADS>>>(S_mat_gpu, mAO_array_gpu, nbsf, p_start_ind);
+    // return S_mat to its original order.
     S_mat = S_mat(undo_sorted_indices, undo_sorted_indices);
 
     return 0;
 }
 
-
-// int eval_Hcoremat(Molecule_basisGPU& system, arma::mat &H_mat){
-//     const int nbsf = system.mAOs.size();
-//     H_mat.set_size(nbsf,nbsf);
-//     arma::mat T_mat(nbsf,nbsf), V_mat(nbsf,nbsf);
-    
-//     T_mat.zeros();
-//     V_mat.zeros();
-
-//     std::vector<AO> sorted_AOs;
-//     arma::uvec sorted_indices;
-    
-//     // Sort AOs by type
-//     size_t p_start_ind = sort_AOs(system.mAOs, sorted_AOs, sorted_indices);
-
-//     arma::uvec undo_sorted_indices = arma::sort_index(sorted_indices);
-
-//     // Perform construction of H, sorted into blocks of ss, sp, ps,pp
-//     construct_V(V_mat, sorted_AOs, p_start_ind, system.m_mol);
-//     construct_T(T_mat, sorted_AOs, p_start_ind);
-
-//     // construct_V_unsorted(V_mat, system.mAOs, system.m_mol);
-//     // construct_T_unsorted(T_mat, system.mAOs);
-
-    
-    
-//     H_mat = T_mat + V_mat;
-
-//     // T_mat.print("Printing T mat ");
-//     // V_mat.print("Printing V mat ");
-//     // return H_mat to its original order.
-//     H_mat = H_mat(undo_sorted_indices, undo_sorted_indices);
-
-//     return 0;
-// }
 
 int eval_Hcoremat(Molecule_basisGPU& system, arma::mat &H_mat){
     const size_t nbsf = system.num_ao;
@@ -106,7 +92,7 @@ int eval_Hcoremat(Molecule_basisGPU& system, arma::mat &H_mat){
 
     // Copy T and V matrices
     double *T_mat_ptr = T_mat.memptr();
-    double *V_mat_ptr = T_mat.memptr();
+    double *V_mat_ptr = V_mat.memptr();
     double *T_mat_gpu, *V_mat_gpu;
 
     cudaMalloc((void**)&T_mat_gpu, nbsf * nbsf* sizeof(double));
@@ -193,104 +179,62 @@ size_t sort_AOs(std::vector<AO> &unsorted_AOs, std::vector<AO> &sorted_AOs, arma
     return s_orbs.size();
 }
 
-void construct_S(arma::mat &Smat, std::vector<AOGPU> &mAOs, size_t p_start_ind){
-    // Handle ss, then sp, then pp.
-    // Might be inefficient for small s_orbs.size() and p_orbs.size()
+// void construct_S(arma::mat &Smat, std::vector<AOGPU> &mAOs, size_t p_start_ind){
+//     // Handle ss, then sp, then pp.
+//     // Might be inefficient for small s_orbs.size() and p_orbs.size()
     
+//     // ss
+//     for (size_t mu = 0; mu < p_start_ind; mu++){
+//         for (size_t nu = 0; nu < p_start_ind; nu++){
+//             Smat(mu,nu) = eval_Smunu(mAOs[mu], mAOs[nu]);
+//         }
+//     }
+//     // ps
+//     for (size_t mu = p_start_ind; mu < Smat.n_rows; mu++){
+//         for (size_t nu = 0; nu < p_start_ind; nu++){
+//             Smat(mu,nu) = eval_Smunu(mAOs[mu], mAOs[nu]);
+//         }
+//     }
+//     // sp
+//     for (size_t mu = 0; mu < p_start_ind; mu++){
+//         for (size_t nu = p_start_ind; nu < Smat.n_cols; nu++){
+//             Smat(mu,nu) = eval_Smunu(mAOs[mu], mAOs[nu]);
+//         }
+//     }
+//     // pp
+//     for (size_t mu = p_start_ind; mu < Smat.n_rows; mu++){
+//         for (size_t nu = p_start_ind; nu < Smat.n_cols; nu++){
+//             Smat(mu,nu) = eval_Smunu(mAOs[mu], mAOs[nu]);
+//         }
+//     }
+
+// }
+__device__ void construct_S_block(double* Smat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf){
+    size_t tid = TID;
+    CHECK_TID // return if thread num exceeds num of elements in block
     // ss
-    for (size_t mu = 0; mu < p_start_ind; mu++){
-        for (size_t nu = 0; nu < p_start_ind; nu++){
-            Smat(mu,nu) = eval_Smunu(mAOs[mu], mAOs[nu]);
-        }
-    }
-    // ps
-    for (size_t mu = p_start_ind; mu < Smat.n_rows; mu++){
-        for (size_t nu = 0; nu < p_start_ind; nu++){
-            Smat(mu,nu) = eval_Smunu(mAOs[mu], mAOs[nu]);
-        }
-    }
-    // sp
-    for (size_t mu = 0; mu < p_start_ind; mu++){
-        for (size_t nu = p_start_ind; nu < Smat.n_cols; nu++){
-            Smat(mu,nu) = eval_Smunu(mAOs[mu], mAOs[nu]);
-        }
-    }
-    // pp
-    for (size_t mu = p_start_ind; mu < Smat.n_rows; mu++){
-        for (size_t nu = p_start_ind; nu < Smat.n_cols; nu++){
-            Smat(mu,nu) = eval_Smunu(mAOs[mu], mAOs[nu]);
-        }
-    }
+    size_t mu = tid % num_mu;
+    size_t nu = tid / num_nu;
+    size_t mu_nu_ind = mu + mu_start_ind + (nu + nu_start_ind)*nbsf;
+
+    // arma::mat Tmat_block(Tmat + mu_start_ind + nu_start_ind*nbsf, num_mu, num_nu, false, true);
+    // Tmat_block(mu,nu) = eval_Tmunu(mAOs[mu + mu_start_ind], mAOs[nu + nu_start_ind]);
+    
+    Smat[mu_nu_ind] = eval_Smunu(mAOs[mu + mu_start_ind], mAOs[nu + nu_start_ind]);
+
+
+}
+__global__ void construct_S(double* Smat,  AOGPU* mAOs, size_t nbsf, size_t p_start_ind){
+
+    size_t p_dim = nbsf - p_start_ind;
+
+    construct_S_block(Smat, mAOs, 0, 0, p_start_ind, p_start_ind, nbsf); // ss
+    construct_S_block(Smat, mAOs, p_start_ind, 0, p_dim, p_start_ind, nbsf); // ps
+    construct_S_block(Smat, mAOs, 0, p_start_ind, p_start_ind, p_dim, nbsf); // sp
+    construct_S_block(Smat, mAOs, p_start_ind, p_start_ind, p_dim, p_dim, nbsf); // pp
 
 }
 
-// void construct_V(arma::mat &Vmat, std::vector<AO> &mAOs, size_t p_start_ind, const Molecule &mol){
-//     // Handle ss, then sp, then pp.
-//     // Might be inefficient for small s_orbs.size() and p_orbs.size()
-    
-//     // ss
-//     for (size_t mu = 0; mu < p_start_ind; mu++){
-//         for (size_t nu = 0; nu < p_start_ind; nu++){
-//             Vmat(mu,nu) = eval_Vmunu(mAOs[mu], mAOs[nu], mol);
-//         }
-//     }
-//     // ps
-//     for (size_t mu = p_start_ind; mu < Vmat.n_rows; mu++){
-//         for (size_t nu = 0; nu < p_start_ind; nu++){
-//             Vmat(mu,nu) = eval_Vmunu(mAOs[mu], mAOs[nu], mol);
-//         }
-//     }
-//     // sp
-//     for (size_t mu = 0; mu < p_start_ind; mu++){
-//         for (size_t nu = p_start_ind; nu < Vmat.n_cols; nu++){
-//             Vmat(mu,nu) = eval_Vmunu(mAOs[mu], mAOs[nu], mol);
-//         }
-//     }
-//     // pp
-//     for (size_t mu = p_start_ind; mu < Vmat.n_rows; mu++){
-//         for (size_t nu = p_start_ind; nu < Vmat.n_cols; nu++){
-//             Vmat(mu,nu) = eval_Vmunu(mAOs[mu], mAOs[nu], mol);
-//         }
-//     }
-
-// }
-
-// void construct_T(arma::mat &Tmat, std::vector<AO> &mAOs, size_t p_start_ind){
-//     // for (size_t mu = 0; mu < Tmat.n_rows; mu++){
-//     //     for (size_t nu = 0; nu < Tmat.n_cols; nu++){
-//     //         Tmat(mu,nu) = eval_Tmunu(mAOs[mu], mAOs[nu]);
-//     //     }
-//     // }
-
-//     // Handle ss, then sp, then pp.
-//     // Might be inefficient for small s_orbs.size() and p_orbs.size()
-    
-//     // ss
-//     for (size_t mu = 0; mu < p_start_ind; mu++){
-//         for (size_t nu = 0; nu < p_start_ind; nu++){
-//             Tmat(mu,nu) = eval_Tmunu(mAOs[mu], mAOs[nu]);
-//         }
-//     }
-//     // ps
-//     for (size_t mu = p_start_ind; mu < Tmat.n_rows; mu++){
-//         for (size_t nu = 0; nu < p_start_ind; nu++){
-//             Tmat(mu,nu) = eval_Tmunu(mAOs[mu], mAOs[nu]);
-//         }
-//     }
-//     // sp
-//     for (size_t mu = 0; mu < p_start_ind; mu++){
-//         for (size_t nu = p_start_ind; nu < Tmat.n_cols; nu++){
-//             Tmat(mu,nu) = eval_Tmunu(mAOs[mu], mAOs[nu]);
-//         }
-//     }
-//     // pp
-//     for (size_t mu = p_start_ind; mu < Tmat.n_rows; mu++){
-//         for (size_t nu = p_start_ind; nu < Tmat.n_cols; nu++){
-//             Tmat(mu,nu) = eval_Tmunu(mAOs[mu], mAOs[nu]);
-//         }
-//     }
-
-// }
 
 
 __device__ void construct_T_block(double* Tmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf){
@@ -299,9 +243,14 @@ __device__ void construct_T_block(double* Tmat,  AOGPU* mAOs, size_t mu_start_in
     // ss
     size_t mu = tid % num_mu;
     size_t nu = tid / num_nu;
+    size_t mu_nu_ind = mu + mu_start_ind + (nu + nu_start_ind)*nbsf;
 
-    arma::mat Tmat_block(Tmat + mu_start_ind + nu_start_ind*nbsf, num_mu, num_nu, false, true);
-    Tmat_block(mu,nu) = eval_Tmunu(mAOs[mu + mu_start_ind], mAOs[nu + nu_start_ind]);
+    // arma::mat Tmat_block(Tmat + mu_start_ind + nu_start_ind*nbsf, num_mu, num_nu, false, true);
+    // Tmat_block(mu,nu) = eval_Tmunu(mAOs[mu + mu_start_ind], mAOs[nu + nu_start_ind]);
+    
+    Tmat[mu_nu_ind] = eval_Tmunu(mAOs[mu + mu_start_ind], mAOs[nu + nu_start_ind]);
+
+
 }
 
 __device__ void construct_V_block(double* Vmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf, Molecule_basisGPU &mol){
@@ -310,9 +259,11 @@ __device__ void construct_V_block(double* Vmat,  AOGPU* mAOs, size_t mu_start_in
     // ss
     size_t mu = tid % num_mu;
     size_t nu = tid / num_nu;
+    size_t mu_nu_ind = mu + mu_start_ind + (nu + nu_start_ind)*nbsf;
 
-    arma::mat Vmat_block(Vmat + mu_start_ind + nu_start_ind*nbsf, num_mu, num_nu, false, true);
-    Vmat_block(mu,nu) = eval_Vmunu(mAOs[mu + mu_start_ind], mAOs[nu + nu_start_ind], mol);
+    // arma::mat Vmat_block(Vmat + mu_start_ind + nu_start_ind*nbsf, num_mu, num_nu, false, true);
+    // Vmat_block(mu,nu) = eval_Vmunu(mAOs[mu + mu_start_ind], mAOs[nu + nu_start_ind], mol);
+    Vmat[mu_nu_ind] = eval_Vmunu(mAOs[mu + mu_start_ind], mAOs[nu + nu_start_ind], mol);
 }
 
 
@@ -331,39 +282,6 @@ __global__ void construct_TV(double* Tmat, double* Vmat, AOGPU* mAOs, size_t nbs
     construct_V_block(Vmat, mAOs, p_start_ind, p_start_ind, p_dim, p_dim, nbsf, mol); // pp
 
 }
-// // UNSORTED FUNCTIONS
-// void construct_S_unsorted(arma::mat &Smat, std::vector<AO> &mAOs){
-//     // Handle ss, then sp, then pp.
-    
-//     for (size_t mu = 0; mu < Smat.n_rows; mu++){
-//         for (size_t nu = 0;  nu < Smat.n_cols; nu++){
-//             Smat(mu,nu) = eval_Smunu(mAOs[mu], mAOs[nu]);
-//         }
-//     }
-
-// }
-
-// void construct_V_unsorted(arma::mat &Vmat, std::vector<AO> &mAOs, const Molecule &mol){
-//     // Handle ss, then sp, then pp.
-//     // Might be inefficient for small s_orbs.size() and p_orbs.size()
-    
-//     for (size_t mu = 0; mu < Vmat.n_rows; mu++){
-//         for (size_t nu = 0;  nu < Vmat.n_cols; nu++){
-//             Vmat(mu,nu) = eval_Vmunu(mAOs[mu], mAOs[nu],mol);
-//         }
-//     }
-// }
-// void construct_T_unsorted(arma::mat &Tmat, std::vector<AO> &mAOs){
-    
-//     for (size_t mu = 0; mu < Tmat.n_rows; mu++){
-//         for (size_t nu = 0;  nu < Tmat.n_cols; nu++){
-//             Tmat(mu,nu) = eval_Tmunu(mAOs[mu], mAOs[nu]);
-//         }
-//     }
-// }
-
-
-
 
 
 __device__ double eval_Smunu(AOGPU &mu, AOGPU &nu){
@@ -380,8 +298,8 @@ __device__ double eval_Smunu(AOGPU &mu, AOGPU &nu){
     int l2 = nu.lmn[0];
     int m2 = nu.lmn[1];
     int n2 = nu.lmn[2];
-    arma::vec A(mu.R0,3);
-    arma::vec B(nu.R0,3);
+    double* A = mu.R0; // pointer
+    double* B = nu.R0;
 
     for (size_t mup = 0; mup < mu_no_primitives; mup++){
         double alpha = mu.alpha[mup];
@@ -412,8 +330,8 @@ __device__ double eval_Tmunu(AOGPU &mu, AOGPU &nu){
     int l2 = nu.lmn[0];
     int m2 = nu.lmn[1];
     int n2 = nu.lmn[2];
-    arma::vec A(mu.R0,3);
-    arma::vec B(nu.R0,3);
+    double* A = mu.R0; // pointer
+    double* B = nu.R0;
 
     for (size_t mup = 0; mup < mu_no_primitives; mup++){
         double alpha = mu.alpha[mup];
@@ -445,12 +363,11 @@ __device__ double eval_Vmunu(AOGPU &mu, AOGPU &nu, const Molecule_basisGPU &mol)
     int l2 = nu.lmn[0];
     int m2 = nu.lmn[1];
     int n2 = nu.lmn[2];
-    arma::vec A(mu.R0,3);
-    arma::vec B(nu.R0,3);
-
+    double* A = mu.R0; // pointer
+    double* B = nu.R0;
     for (size_t c = 0; c < mol.num_atom; c++){
         // arma::vec C = mol.mAtoms[c].m_coord; // coordinates of the atom
-        arma::vec C(mol.Atom_coords + 3*c, 3);
+        double* C = mol.Atom_coords + 3*c; // pointer arithmetic to get starting point of C coords
         int Z = mol.effective_charges[c];
         for (size_t mup = 0; mup < mu_no_primitives; mup++){
             double alpha = mu.alpha[mup];
@@ -586,9 +503,15 @@ __device__ int nCk (int n, int k){
     return factorial(n)/(factorial(k) * factorial(n-k));
 }
 
-__device__ arma::vec gaussian_product_center(double alpha, arma::vec &A, double beta, arma::vec &B){
+__device__ vector_gpu gaussian_product_center(double alpha, vector_gpu &A, double beta, vector_gpu &B){
     //computes the new gaussian center P.
-    return (alpha*A + beta*B)/(alpha + beta);
+    // double* P;
+    return (A*alpha + B*beta)*(1.0/(alpha + beta));
+
+    // for (size_t i =0; i<3; i++){
+    //     P[i] = (alpha*A[i]+ beta*B[i])/(alpha + beta);
+    // }
+    // return P;
 }
 
 __device__ double poly_binom_expans_terms(int n, int ia, int ib, double PminusA_1d, double PminusB_1d){
@@ -597,7 +520,7 @@ __device__ double poly_binom_expans_terms(int n, int ia, int ib, double PminusA_
 
     for (int t = 0; t < n + 1; t++){
         if (n - ia <= t && t <= ib){
-            total += Combination(ia, n-t) * Combination (ib,t) * pow(PminusA_1d, ia-n+t) * pow(PminusB_1d, ib-t);
+            total += nCk(ia, n-t) * nCk (ib,t) * pow(PminusA_1d, ia-n+t) * pow(PminusB_1d, ib-t);
         }
     }
     return total;
@@ -605,26 +528,29 @@ __device__ double poly_binom_expans_terms(int n, int ia, int ib, double PminusA_
 
 __device__ double overlap_1d(int l1, int l2, double PminusA_1d, double PminusB_1d, double gamma){
     double total  = 0.0;
-    for (int i = 0; i < (1+ int(__floor((l1+l2)/2))); i++){
-        total += poly_binom_expans_terms(2*i, l1, l2,PminusA_1d, PminusB_1d )* DoubleFactorial(2*i-1)/pow(2*gamma, i);
+    // for (int i = 0; i < (1+ int(floor((l1+l2)/2))); i++){
+    for (int i = 0; i < (1+ int(floorf(l1+l2)/2)); i++){
+        total += poly_binom_expans_terms(2*i, l1, l2,PminusA_1d, PminusB_1d )* factorial(factorial((2*i-1)/pow(2*gamma, i)));
     }
     return total;
 
 }
 
-__device__ double overlap(arma::vec A,  int l1, int m1, int n1,double alpha, arma::vec B, int l2, int m2, int n2,double beta ){
+__device__ double overlap(double* A,  int l1, int m1, int n1,double alpha, double* B, int l2, int m2, int n2,double beta ){
     double gamma = alpha + beta;
-    arma::vec P = gaussian_product_center(alpha, A, beta, B);
+    vector_gpu A_vec(A,3);
+    vector_gpu B_vec(B,3);
+    vector_gpu P_vec = gaussian_product_center(alpha, A_vec, beta, B_vec);
+    double* P = P_vec.coords();
 
-    double prefactor = pow(M_PI/gamma,1.5) * exp(-alpha * beta * pow(arma::norm(A-B),2)/gamma);
-
-    double sx = overlap_1d(l1,l2,P(0)-A(0),P(0)-B(0),gamma);
-    double sy = overlap_1d(m1,m2,P(1)-A(1),P(1)-B(1),gamma);
-    double sz = overlap_1d(n1,n2,P(2)-A(2),P(2)-B(2),gamma);
+    double prefactor = pow(M_PI/gamma,1.5) * exp(-alpha * beta * pow((A_vec-B_vec).norm(),2)/gamma);
+    double sx = overlap_1d(l1,l2,P[0]-A[0],P[0]-B[0],gamma);
+    double sy = overlap_1d(m1,m2,P[1]-A[1],P[1]-B[1],gamma);
+    double sz = overlap_1d(n1,n2,P[2]-A[2],P[2]-B[2],gamma);
     return prefactor * sx * sy * sz;
 }
 
-__device__ double kinetic(arma::vec A,int l1, int m1, int n1,double alpha, arma::vec B, int l2, int m2, int n2, double beta){
+__device__ double kinetic(double* A,int l1, int m1, int n1,double alpha, double* B, int l2, int m2, int n2, double beta){
     // Formulation from JPS (21) 11, Nov 1966 by H Taketa et. al
 
     double term0 = beta*(2*(l2+m2+n2)+3)*overlap(A,l1,m1,n1,alpha,B,l2,m2,n2,beta);
@@ -648,44 +574,62 @@ __device__ double A_term(int i, int r, int u, int l1, int l2,double PAx, double 
            pow(0.25/gamma,r+u)/factorial(r)/factorial(u)/factorial(i-2*r-2*u);
 }
 
-__device__ arma::vec A_tensor(int l1, int l2, double PA, double PB, double CP, double g){
+__device__ vector_gpu A_tensor(int l1, int l2, double PA, double PB, double CP, double g){
     int Imax = l1+l2+1;
-    arma::vec A(Imax);
-    A.zeros();
+    // double A_coords[Imax] = {0};
+    double *A_coords = (double*)malloc(Imax*sizeof(double));
+    memset(A_coords, 0.0, Imax*sizeof(double));
+
+    // arma::vec A(Imax);
+    // A.zeros();
     for (int i = 0; i < Imax; i++){
-        for (int r = 0; r < int(__floor(i/2)+1); r++){
-            for (int u = 0; u < int(__floor((i-2*r)/2)+1); u++){
+        for (int r = 0; r < int(floorf(i/2)+1); r++){
+            for (int u = 0; u < int(floorf((i-2*r)/2)+1); u++){
                 int  I = i - 2*r - u;
-                A[I] = A[I] + A_term(i,r,u,l1,l2,PA,PB,CP,g);
+                A_coords[I] = A_coords[I] + A_term(i,r,u,l1,l2,PA,PB,CP,g);
             }
         }
     }
-
+    vector_gpu A(A_coords,Imax);
     return A;
 
 }
-__device__ double nuclear_attraction(arma::vec &A,int l1, int m1, int n1,double alpha, arma::vec &B, int l2, int m2, int n2,double beta, arma::vec &C){
+__device__ double nuclear_attraction(double *A,int l1, int m1, int n1,double alpha, double *B, int l2, int m2, int n2,double beta, double *C){
     // Formulation from JPS (21) 11, Nov 1966 by H Taketa et. al
-    
+    vector_gpu A_vec(A,3);
+    vector_gpu B_vec(B,3);
+    vector_gpu C_vec(C,3);
     double gamma = alpha + beta;
 
-    arma::vec P = gaussian_product_center(alpha,A,beta,B);
-    double rab2 = pow(arma::norm(A-B),2);
-    double rcp2 = pow(arma::norm(C-P),2);
+    vector_gpu P_vec = gaussian_product_center(alpha, A_vec, beta, B_vec);
+    // double P* =
+    // double rab2 = pow(arma::norm(A-B),2);
+    // double rcp2 = pow(arma::norm(C-P),2);
 
-    arma::vec dPA = P-A;
-    arma::vec dPB = P-B;
-    arma::vec dPC = P-C;
+    double rab2 = pow((A_vec-B_vec).norm(),2);
+    double rcp2 = pow((C_vec-P_vec).norm(),2);
+    
+    vector_gpu dPA_vec = P_vec-A_vec;
+    vector_gpu dPB_vec = P_vec-B_vec;
+    vector_gpu dPC_vec = P_vec-C_vec;
 
-    arma::vec Ax = A_tensor(l1,l2,dPA(0),dPB(0),dPC(0),gamma);
-    arma::vec Ay = A_tensor(m1,m2,dPA(1),dPB(1),dPC(1),gamma);
-    arma::vec Az = A_tensor(n1,n2,dPA(2),dPB(2),dPC(2),gamma);
+    double* dPA = dPA_vec.coords();
+    double* dPB = dPB_vec.coords();
+    double* dPC = dPC_vec.coords();
+
+    vector_gpu Ax_vec = A_tensor(l1,l2,dPA[0],dPB[0],dPC[0],gamma);
+    vector_gpu Ay_vec = A_tensor(m1,m2,dPA[1],dPB[1],dPC[1],gamma);
+    vector_gpu Az_vec = A_tensor(n1,n2,dPA[2],dPB[2],dPC[2],gamma);
+
+    double* Ax = Ax_vec.coords();
+    double* Ay = Ay_vec.coords();
+    double* Az = Az_vec.coords();
 
     double total = 0.0;
     for (int I = 0; I < l1+l2+1; I++)
         for (int J = 0; J < m1+m2+1; J++)
             for (int K = 0; K < n1+n2+1; K++)
-                total += Ax(I)*Ay(J)*Az(K)*Fgamma(I+J+K,rcp2*gamma);
+                total += Ax[I]*Ay[J]*Az[K]*Fgamma(I+J+K,rcp2*gamma);
                 
     double val= -2*M_PI/gamma*exp(-alpha*beta*rab2/gamma)*total;
     return val;
