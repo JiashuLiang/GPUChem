@@ -3,6 +3,7 @@
 #include <iostream>
 #include <chrono>
 #include <integral/Hamiltonian.h>
+#include <integral/HartreeFock_Rys_gpu.cuh>
 
 double hartree_to_ev = 27.211396641308;
 
@@ -26,8 +27,8 @@ RSCF::RSCF(Molecule_basis &m_molbasis_i, int max_it, double tolerence,
   // S.print("Overlap");
   
   //Initialize the Hamiltonian
-  if (hamiltonian_name == "hf")
-    m_hamiltonian = new HartreeFock_Rys(m_molbasis, 1e-3 * tolerence);
+  if (hamiltonian_name == "hf_gpu")
+    m_hamiltonian = new HartreeFock_Rys_gpu(m_molbasis, 1e-3 * tolerence);
   else
     m_hamiltonian = new HartreeFock_Rys(m_molbasis, 1e-3 * tolerence);
 
