@@ -84,7 +84,7 @@ size_t sort_AOs(std::vector<AO> &unsorted_AOs, std::vector<AO> &sorted_AOs, arma
 
 __device__ double eval_Smunu(AOGPU &mu, AOGPU &nu);
 __device__ double eval_Tmunu(AOGPU &mu, AOGPU &nu);
-__device__ double eval_Vmunu(AOGPU &mu, AOGPU &nu, const Molecule_basisGPU &mol);
+__device__ double eval_Vmunu(AOGPU &mu, AOGPU &nu, const Molecule_basisGPU *mol);
 
 // math utils
 __device__ int factorial (int n);
@@ -114,10 +114,10 @@ __device__ double nuclear_attraction(double *A,int l1, int m1, int n1,double alp
 
 // additional GPU funcs
 
-__device__ void construct_S_block(double* Tmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf);
+__device__ void construct_S_block(double* Tmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf, size_t tid);
 __global__ void construct_S(double* Smat,  AOGPU* mAOs, size_t nbsf, size_t p_start_ind);
-__device__ void construct_T_block(double* Tmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf);
-__device__ void construct_V_block(double* Vmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf, const Molecule_basisGPU* mol);
+__device__ void construct_T_block(double* Tmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf, size_t tid);
+__device__ void construct_V_block(double* Vmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf, const Molecule_basisGPU* mol, size_t tid);
 __global__ void construct_TV(double* Tmat, double* Vmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind, Molecule_basisGPU* mol);
 #endif // HCORE_CUH
 }
