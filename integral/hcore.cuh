@@ -119,5 +119,9 @@ __global__ void construct_S(double* Smat,  AOGPU* mAOs, size_t nbsf, size_t p_st
 __device__ void construct_T_block(double* Tmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf, size_t tid);
 __device__ void construct_V_block(double* Vmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf, const Molecule_basisGPU* mol, size_t tid);
 __global__ void construct_TV(double* Tmat, double* Vmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind, Molecule_basisGPU* mol);
+
+__global__ void construct_T(double* Tmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind);
+__global__ void construct_V(double* Vmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind, Molecule_basisGPU* mol);
+
 #endif // HCORE_CUH
 }

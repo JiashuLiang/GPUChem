@@ -181,22 +181,41 @@ int eval_Hcoremat(Molecule_basisGPU& system, Molecule_basis& system_cpu,arma::ma
     double *T_mat_gpu, *V_mat_gpu;
 
     cudaMalloc((void**)&T_mat_gpu, nbsf * nbsf* sizeof(double));
-    cudaMemcpy(T_mat_gpu, T_mat_ptr, nbsf * nbsf * sizeof(double), cudaMemcpyHostToDevice);
-
-    cudaMalloc((void**)&V_mat_gpu, nbsf * nbsf* sizeof(double));
-    cudaMemcpy(V_mat_gpu, V_mat_ptr, nbsf * nbsf * sizeof(double), cudaMemcpyHostToDevice);
+    // cudaMemcpy(T_mat_gpu, T_mat_ptr, nbsf * nbsf * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemset(T_mat_gpu, 0.0, sizeof(double) * nbsf*nbsf);
     
+    cudaMalloc((void**)&V_mat_gpu, nbsf * nbsf* sizeof(double));
+    // cudaMemcpy(V_mat_gpu, V_mat_ptr, nbsf * nbsf * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemset(V_mat_gpu, 0.0, sizeof(double) * nbsf*nbsf);
+
     int num_blocks = (nbsf * nbsf /NUM_THREADS)+ 1;
     std::cout<< "\n Constructing TV, num_blocks is "<< num_blocks <<std::endl;
 
-    construct_TV<<<num_blocks,NUM_THREADS>>>(T_mat_gpu,  V_mat_gpu, mAO_array_gpu, nbsf, p_start_ind, &system);
+    // construct_TV<<<num_blocks,NUM_THREADS>>>(T_mat_gpu,  V_mat_gpu, mAO_array_gpu, nbsf, p_start_ind, &system);
+    construct_T<<<num_blocks,NUM_THREADS>>>(T_mat_gpu,  mAO_array_gpu, nbsf, p_start_ind);
     cudaDeviceSynchronize();
+    cudaError_t cudaStatus = cudaGetLastError();
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "construct_T launch failed: %s\n", cudaGetErrorString(cudaStatus));
+        // goto Error;
+    }
     cudaMemcpy(T_mat_ptr, T_mat_gpu,  nbsf * nbsf * sizeof(double), cudaMemcpyDeviceToHost);
+
+
+
+
+    construct_V<<<num_blocks,NUM_THREADS>>>(V_mat_gpu, mAO_array_gpu, nbsf, p_start_ind, &system);
+    cudaDeviceSynchronize();
+    cudaStatus = cudaGetLastError();
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "construct_V launch failed: %s\n", cudaGetErrorString(cudaStatus));
+        // goto Error;
+    }
     cudaMemcpy(V_mat_ptr, V_mat_gpu, nbsf * nbsf * sizeof(double), cudaMemcpyDeviceToHost);
     
     std::cout<< "\n Tmat matrix first element is " << T_mat_ptr[0]<<std::endl;
-    arma::mat T_mat(T_mat_ptr,nbsf,nbsf,false,true);
-    arma::mat V_mat(V_mat_ptr,nbsf,nbsf,false,true);
+    arma::mat T_mat(T_mat_ptr,nbsf,nbsf,true,false);
+    arma::mat V_mat(V_mat_ptr,nbsf,nbsf,true,false);
     H_mat = T_mat + V_mat;
 
     T_mat.print("T_mat");
@@ -323,7 +342,7 @@ __device__ void construct_T_block(double* Tmat,  AOGPU* mAOs, size_t mu_start_in
 
     // arma::mat Tmat_block(Tmat + mu_start_ind + nu_start_ind*nbsf, num_mu, num_nu, false, true);
     // Tmat_block(mu,nu) = eval_Tmunu(mAOs[mu + mu_start_ind], mAOs[nu + nu_start_ind]);
-    int id = mu + mu_start_ind;
+    // int id = mu + mu_start_ind;
     // printf("tid %d computing for mu= %d, nu=%d and mu_nu_ind=%d\n", int(tid), int(mu + mu_start_ind), int(nu + nu_start_ind), int(mu_nu_ind));
     // printf("%d info, R( %1.2f, %1.2f, %1.2f), with angular momentum: %x %x %x, alpha:( %1.2f, %1.2f, %1.2f), dcoef( %1.2f, %1.2f, %1.2f) and len %d\n", int(tid),
     //     mAOs[id].R0[0], mAOs[id].R0[1], mAOs[id].R0[2], mAOs[id].lmn[0], mAOs[id].lmn[1], mAOs[id].lmn[2],
@@ -343,13 +362,11 @@ __device__ void construct_V_block(double* Vmat,  AOGPU* mAOs, size_t mu_start_in
     size_t mu = tid % num_mu;
     size_t nu = tid / num_mu;
     size_t mu_nu_ind = mu + mu_start_ind + (nu + nu_start_ind)*nbsf;
-
-
     // arma::mat Vmat_block(Vmat + mu_start_ind + nu_start_ind*nbsf, num_mu, num_nu, false, true);
     // Vmat_block(mu,nu) = eval_Vmunu(mAOs[mu + mu_start_ind], mAOs[nu + nu_start_ind], mol);
-    printf("tid %d computing for mu= %d, nu=%d and mu_nu_ind=%d\n", int(tid), int(mu), int(nu), int(mu_nu_ind));
+    // printf("tid %d computing for mu= %d, nu=%d and mu_nu_ind=%d\n", int(tid), int(mu), int(nu), int(mu_nu_ind));
     Vmat[mu_nu_ind] = eval_Vmunu(mAOs[mu + mu_start_ind], mAOs[nu + nu_start_ind], mol);
-    printf("tid %d computes that Vmat[%d]= %1.2f\n", int(tid), int(mu_nu_ind),Vmat[mu_nu_ind]);
+    // printf("tid %d computes that Vmat[%d]= %1.2f\n", int(tid), int(mu_nu_ind),Vmat[mu_nu_ind]);
 
 }
 
@@ -374,6 +391,29 @@ __global__ void construct_TV(double* Tmat, double* Vmat, AOGPU* mAOs, size_t nbs
     // construct_V_block(Vmat, mAOs, p_start_ind, 0, p_dim, p_start_ind, nbsf, mol, tid); // ps
     // construct_V_block(Vmat, mAOs, 0, p_start_ind, p_start_ind, p_dim, nbsf, mol, tid); // sp
     // construct_V_block(Vmat, mAOs, p_start_ind, p_start_ind, p_dim, p_dim, nbsf, mol, tid); // pp
+    construct_V_block(Vmat, mAOs, 0,           0,           nbsf,  nbsf, nbsf, mol, tid); // ss
+    // printf("construct_T is done, tid %d\n", int(tid));
+
+}
+
+
+__global__ void construct_T(double* Tmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind){
+    size_t tid = threadIdx.x + blockIdx.x * blockDim.x;
+    size_t p_dim = nbsf - p_start_ind;
+    if (tid==0) printf("construct_T beginning, p_dim is  %d, nbsf is %d \n", int(p_dim), int(nbsf));
+
+    construct_T_block(Tmat, mAOs, 0,           0,           nbsf,  nbsf, nbsf, tid); // ss
+    
+    if (tid==0) printf("construct_T is done, tid %d\n", int(tid));
+    if (tid==0) printf(" Tmat[0]= %1.2f\n",Tmat[0]);
+
+}
+
+
+__global__ void construct_V(double* Vmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind, Molecule_basisGPU* mol){
+    size_t tid = threadIdx.x + blockIdx.x * blockDim.x;
+    size_t p_dim = nbsf - p_start_ind;
+    if (tid==0) printf("construct_V beginning, p_dim is  %d, nbsf is %d \n", int(p_dim), int(nbsf));
     construct_V_block(Vmat, mAOs, 0,           0,           nbsf,  nbsf, nbsf, mol, tid); // ss
     // printf("construct_T is done, tid %d\n", int(tid));
 
@@ -615,6 +655,31 @@ __device__ double DoubleFactorial(int n)
 }
 
 
+__device__ double Combination(int n, int k)
+{
+  if (n < k || k < 0)
+  {
+    printf("Comination: the number of elements should be bigger than selection numbers AND two numbers should be positive\n");
+    assert(false);
+  }
+  double result = 1e308;
+  if (pow(result, 1.0 / k) < n)
+  {
+    printf("The Combination number may be bigger than the maxium of double precision\n");
+    assert(false);
+  }
+  double n_d = (double)n;
+  result = 1.0;
+  int k_small = min(k, n - k);
+  for (double j = (double)k_small; j > 0; j--)
+  {
+    result /= j;
+    result *= n_d;
+    n_d--;
+  }
+  return result;
+}
+
 __device__ int nCk (int n, int k){
     return factorial(n)/(factorial(k) * factorial(n-k));
 }
@@ -632,27 +697,39 @@ __device__ vector_gpu gaussian_product_center(double alpha, vector_gpu &A, doubl
 
 __device__ double poly_binom_expans_terms(int n, int ia, int ib, double PminusA_1d, double PminusB_1d){
     // computes the binomial expansion for the terms where ia + ib = n.
+    // double total = 0.0;
+
+    // for (int t = 0; t < n + 1; t++){
+    //     if (n - ia <= t && t <= ib){
+    //         total += nCk(ia, n-t) * nCk (ib,t) * pow(PminusA_1d, ia-n+t) * pow(PminusB_1d, ib-t);
+    //     }
+    // }
+    // return total;
     double total = 0.0;
 
     for (int t = 0; t < n + 1; t++){
         if (n - ia <= t && t <= ib){
-            total += nCk(ia, n-t) * nCk (ib,t) * pow(PminusA_1d, ia-n+t) * pow(PminusB_1d, ib-t);
+            total += Combination(ia, n-t) * Combination (ib,t) * pow(PminusA_1d, ia-n+t) * pow(PminusB_1d, ib-t);
         }
     }
     return total;
 }
 
 __device__ double overlap_1d(int l1, int l2, double PminusA_1d, double PminusB_1d, double gamma){
+    // double total  = 0.0;
+    // // for (int i = 0; i < (1+ int(floor((l1+l2)/2))); i++){
+    // for (int i = 0; i < (1+ int(floorf((l1+l2)/2))); i++){
+    //     total += poly_binom_expans_terms(2*i, l1, l2,PminusA_1d, PminusB_1d )* DoubleFactorial((2*i-1)/pow(2*gamma, i));
+    // }
+    // return total;
     double total  = 0.0;
-    // for (int i = 0; i < (1+ int(floor((l1+l2)/2))); i++){
-    for (int i = 0; i < (1+ int(floorf(l1+l2)/2)); i++){
-        total += poly_binom_expans_terms(2*i, l1, l2,PminusA_1d, PminusB_1d )* DoubleFactorial((2*i-1)/pow(2*gamma, i));
+    for (int i = 0; i < (1+ int(floorf((l1+l2)/2))); i++){
+        total += poly_binom_expans_terms(2*i, l1, l2,PminusA_1d, PminusB_1d )* DoubleFactorial(2*i-1)/pow(2*gamma, i);
     }
     return total;
-
 }
 
-__device__ double overlap(double* A,  int l1, int m1, int n1,double alpha, double* B, int l2, int m2, int n2,double beta ){
+__device__ double overlap(double* A,  int l1, int m1, int n1, double alpha, double* B, int l2, int m2, int n2,double beta ){
     double gamma = alpha + beta;
     // printf("started overlap\n");
     vector_gpu A_vec(A,3);
@@ -665,7 +742,7 @@ __device__ double overlap(double* A,  int l1, int m1, int n1,double alpha, doubl
     double prefactor = pow(M_PI/gamma,1.5) * exp(-alpha * beta * pow((A_vec-B_vec).norm(),2)/gamma);
     // printf("Finished prefactor\n");
     // printf("Calculating overlap 1d\n");
-    // printf("P( %1.2f, %1.2f, %1.2f),A:( %1.2f, %1.2f, %1.2f), B( %1.2f, %1.2f, %1.2f)\n", P[0], P[1], P[2],A[0], A[1], A[2],B[0], B[1], B[2]);
+    printf("P( %1.2f, %1.2f, %1.2f),A:( %1.2f, %1.2f, %1.2f), B( %1.2f, %1.2f, %1.2f), alpha (%1.2f), beta (%1.2f)\n", P[0], P[1], P[2],A[0], A[1], A[2],B[0], B[1], B[2], alpha, beta);
     double sx = overlap_1d(l1,l2,P[0]-A[0],P[0]-B[0],gamma);
     double sy = overlap_1d(m1,m2,P[1]-A[1],P[1]-B[1],gamma);
     double sz = overlap_1d(n1,n2,P[2]-A[2],P[2]-B[2],gamma);
