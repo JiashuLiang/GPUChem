@@ -1,5 +1,6 @@
 #if !defined HCORE_CUH
 #define HCORE_CUH
+#define ARMA_ALLOW_FAKE_GCC
 
 #include <basis/molecule_basis.cuh>
 #include <armadillo>
@@ -8,6 +9,9 @@
 #include <cuda_runtime.h>
 
 // need vector class to make my code easier haha
+
+namespace hcore_gpu {
+
 class vector_gpu {
 public:
     // Constructor
@@ -61,19 +65,21 @@ private:
 };
 
 // Primary functions
-int eval_Hcoremat(Molecule_basisGPU& system, arma::mat &H_mat);
-int eval_Hcoremat(Molecule_basis& system, arma::mat &H_mat);
+int eval_Hcoremat(Molecule_basisGPU& system, Molecule_basis& system_cpu, arma::mat &H_mat);
+// int eval_Hcoremat(Molecule_basis& system, arma::mat &H_mat);
 
-int eval_OVmat(Molecule_basis& system, arma::mat &S_mat);
+int eval_OVmat(Molecule_basisGPU& system, Molecule_basis& system_cpu, arma::mat &S_mat);
 
-size_t sort_AOs(std::vector<AO> &unsorted_AOs, std::vector<AO> &sorted_AOs, arma::uvec &sorted_indices);
+// size_t sort_AOs(std::vector<AO> &unsorted_AOs, std::vector<AO> &sorted_AOs, arma::uvec &sorted_indices);
 size_t sort_AOs(AOGPU* unsorted_AOs, const int nbsf, std::vector<AOGPU> &sorted_AOs, arma::uvec &sorted_indices);
-void construct_S(arma::mat &Smat, std::vector<AO> &mAOs, size_t p_start_ind);
-void construct_V(arma::mat &Vmat, std::vector<AO> &mAOs, size_t p_start_ind, const Molecule &mol);
-void construct_T(arma::mat &Tmat, std::vector<AO> &mAOs, size_t p_start_ind);
-void construct_S_unsorted(arma::mat &Smat, std::vector<AO> &mAOs);
-void construct_V_unsorted(arma::mat &Vmat, std::vector<AO> &mAOs, const Molecule &mol);
-void construct_T_unsorted(arma::mat &Tmat, std::vector<AO> &mAOs);
+size_t sort_AOs(std::vector<AO> &unsorted_AOs, std::vector<AO> &sorted_AOs, arma::uvec &sorted_indices);
+
+// void construct_S(arma::mat &Smat, std::vector<AO> &mAOs, size_t p_start_ind);
+// void construct_V(arma::mat &Vmat, std::vector<AO> &mAOs, size_t p_start_ind, const Molecule &mol);
+// void construct_T(arma::mat &Tmat, std::vector<AO> &mAOs, size_t p_start_ind);
+// void construct_S_unsorted(arma::mat &Smat, std::vector<AO> &mAOs);
+// void construct_V_unsorted(arma::mat &Vmat, std::vector<AO> &mAOs, const Molecule &mol);
+// void construct_T_unsorted(arma::mat &Tmat, std::vector<AO> &mAOs);
 
 
 __device__ double eval_Smunu(AOGPU &mu, AOGPU &nu);
@@ -111,6 +117,7 @@ __device__ double nuclear_attraction(double *A,int l1, int m1, int n1,double alp
 __device__ void construct_S_block(double* Tmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf);
 __global__ void construct_S(double* Smat,  AOGPU* mAOs, size_t nbsf, size_t p_start_ind);
 __device__ void construct_T_block(double* Tmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf);
-__device__ void construct_V_block(double* Vmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf, const Molecule_basisGPU &mol);
-__global__ void construct_TV(double* T_mat_gpu, double* V_mat_gpu, AOGPU* mAOs, size_t nbsf, size_t p_start_ind, const Molecule_basisGPU mol);
+__device__ void construct_V_block(double* Vmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf, const Molecule_basisGPU* mol);
+__global__ void construct_TV(double* Tmat, double* Vmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind, Molecule_basisGPU* mol);
 #endif // HCORE_CUH
+}
