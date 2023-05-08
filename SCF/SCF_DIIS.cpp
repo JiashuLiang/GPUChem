@@ -88,7 +88,7 @@ int RSCF_DIIS::run()
     return 1;
   }
   // m_scf->Ea.print("Ea");
-  m_scf->Ca.raw_print("Ca");
+  // m_scf->Ca.raw_print("Ca");
 
   return 0;
 }

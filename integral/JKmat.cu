@@ -1,205 +1,294 @@
 #include "JKmat.cuh"
 #include <basis/molecule_basis.h>
 #include <cmath>
+#include <cuda.h>
+#include <thrust/device_ptr.h>
+#include <thrust/extrema.h>
+
+#define rys_root(flr_index, x) rys_root[(flr_index) + x * rys_root_dim1]
+#define Schwarz_mat(flr_index, x) rys_root[(flr_index) + x * rys_root_dim1]
+#define threadsPerBlock_forNbasisSquare 64
 
 // calculates (i j | k l), each of those is a CGTO basis function
 // sorry using i j k l here instead of mu nu si la
-double eval_2eint(arma::mat& rys_root, AO& AO_i, AO& AO_j, AO& AO_k, AO& AO_l); 
+__device__ double eval_2eint(double *rys_root, AOGPU& AO_i, AOGPU& AO_j, AOGPU& AO_k, AOGPU& AO_l, int rys_root_dim1); 
 
 // rys roots and weights interpolation from the text file
-void rysroot(arma::mat& rys_root, double& X, double& t1, double& t2, double& t3, double& w1, double& w2, double& w3);
+__device__ void rysroot(double *rys_root, double X, double& t1, double& t2, double& t3, double& w1, double& w2, double& w3, int rys_root_dim1);
 
 // 1-dimension Ix evaluation
-double Ix_calc(double& t2, double& xi, double& xj, double& xk, double& xl, double& ai, double& aj, double& ak, double& al, int& nix, int& njx, int& nkx, int& nlx);
+__device__ double Ix_calc(double t2, double xi, double xj, double xk, double xl, double ai, double aj, double ak, double al, int nix, int njx, int nkx, int nlx);
 // properly ordered Ix integrals
-double Ix_calc_ssss(double& t2, double& xi, double& xj, double& xk, double& xl, double& ai, double& aj, double& ak, double& al);
-double Ix_calc_psss(double& t2, double& xi, double& xj, double& xk, double& xl, double& ai, double& aj, double& ak, double& al);
-double Ix_calc_ppss(double& t2, double& xi, double& xj, double& xk, double& xl, double& ai, double& aj, double& ak, double& al);
-double Ix_calc_psps(double& t2, double& xi, double& xj, double& xk, double& xl, double& ai, double& aj, double& ak, double& al);
-double Ix_calc_ppps(double& t2, double& xi, double& xj, double& xk, double& xl, double& ai, double& aj, double& ak, double& al);
-double Ix_calc_pppp(double& t2, double& xi, double& xj, double& xk, double& xl, double& ai, double& aj, double& ak, double& al);
+__device__ double Ix_calc_ssss(double t2, double xi, double xj, double xk, double xl, double ai, double aj, double ak, double al);
+__device__ double Ix_calc_psss(double t2, double xi, double xj, double xk, double xl, double ai, double aj, double ak, double al);
+__device__ double Ix_calc_ppss(double t2, double xi, double xj, double xk, double xl, double ai, double aj, double ak, double al);
+__device__ double Ix_calc_psps(double t2, double xi, double xj, double xk, double xl, double ai, double aj, double ak, double al);
+__device__ double Ix_calc_ppps(double t2, double xi, double xj, double xk, double xl, double ai, double aj, double ak, double al);
+__device__ double Ix_calc_pppp(double t2, double xi, double xj, double xk, double xl, double ai, double aj, double ak, double al);
 
 
 
 
-
-int eval_Gmat_RSCF(Molecule_basis& system, arma::mat& rys_root, arma::mat& Schwarz_mat, double schwarz_tol, arma::mat &Pa_mat, arma::mat &G_mat){
+// GPU kernal to calculate G_mat = 2 * J_mat - K_mat as vector operation
+__global__ void eval_Gmat_RSCF_kernel(double *J_mat, double *K_mat, double *G_mat, int nbasis){
+	int mu = blockIdx.x * blockDim.x + threadIdx.x;
+	if (mu < nbasis * nbasis){
+		G_mat[mu] = 2 * J_mat[mu] - K_mat[mu];
+	}
+}
+int eval_Gmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz_mat, double schwarz_tol, double *Pa_mat, double *G_mat, 
+					int rys_root_dim1){
 	// F = H + G, G is the two-electron part of the Fock matrix
 	// G_{mu nu} = \sum_{si,la}[2(mu nu | si la) - (mu la | si nu)] P_{si la}
 
-	int nbasis = system.mAOs.size();
+	int nbasis = system.num_ao;
 
-	// checking the basis set to see if there is high angular momentum stuff
-	for (int mu = 0; mu < nbasis; mu++) {
-		if (arma::accu(system.mAOs[mu].lmn) >= 2){
-			std::cout << "higher angular momentum basis detected! Can only do s and p";
-			return 1;
-		}
-	}
+	// to find the maximum element in Schwarz_mat 
+	thrust::device_ptr<double> dev_ptr = thrust::device_pointer_cast(Schwarz_mat);
+	thrust::device_ptr<double> max_ptr = thrust::max_element(dev_ptr, dev_ptr + nbasis * nbasis);
+	double schwarz_max = *max_ptr;
 
-	arma::mat J_mat(nbasis, nbasis);
-	arma::mat K_mat(nbasis, nbasis);
-	eval_Jmat_RSCF(system, rys_root, Schwarz_mat, schwarz_tol, Pa_mat, J_mat);
-	eval_Kmat_RSCF(system, rys_root, Schwarz_mat, schwarz_tol, Pa_mat, K_mat);
-	G_mat = 2 * J_mat - K_mat;
-	
-	// double schwarz_tol_sq = schwarz_tol * schwarz_tol;
-	
-	// // brute force direct SCF - we won't be saving (mu nu | si la)'s
-	// // # pragma omp parallel for
-	// for (int mu = 0; mu < nbasis; mu++){
-	// 	AO AO_mu = system.mAOs[mu];
-	// 	for (int nu = mu; nu < nbasis; nu++){ // simple symmetry
-	// 		// each mu nu can be handled bu one GPU block thread
-	// 		// if (Schwarz_mat(mu, nu) < schwarz_tol_sq)
-	// 		// 	continue;
-	// 		AO AO_nu = system.mAOs[nu];
-	// 		double Gmunu = 0;
-	// 		for (int si = 0; si < nbasis; si++){
-	// 			AO AO_si = system.mAOs[si];
-	// 			for (int la = 0; la < nbasis; la++){
-	// 				AO AO_la = system.mAOs[la];
-	// 				double munusila = 0;
-	// 				double mulasinu = 0;
-	// 				if (Schwarz_mat(mu, nu) * Schwarz_mat(si, la) < schwarz_tol_sq)
-	// 					munusila = 0;
-	// 				else
-	// 					munusila = eval_2eint(rys_root, AO_mu, AO_nu, AO_si, AO_la);
-	// 				if (Schwarz_mat(mu, la) * Schwarz_mat(si, nu) < schwarz_tol_sq)
-	// 					mulasinu = 0;
-	// 				else
-	// 					mulasinu = eval_2eint(rys_root, AO_mu, AO_la, AO_si, AO_nu);
-	// 				Gmunu += (2 * munusila - mulasinu) * Pa_mat(si, la);
-	// 				// the paper uses (si la) symmetry I guess for the J matrix, but for simplicity not used here
-	// 				// also neither presceening (!) nor load balancing (?) is considered here, which might be bad
-	// 			}
-	// 		}
-	// 		G_mat(mu, nu) = Gmunu;
-	// 		G_mat(nu, mu) = Gmunu;
+	// Allocate GPU memory for J and K matrices
+	double *J_mat, *K_mat;
+	cudaMallocManaged((void **)&J_mat, nbasis * nbasis * sizeof(double));
+	cudaMallocManaged((void **)&K_mat, nbasis * nbasis * sizeof(double));
+	// Set J and K matrices to zero
+	cudaMemset(J_mat, 0, nbasis * nbasis * sizeof(double));
+	cudaMemset(K_mat, 0, nbasis * nbasis * sizeof(double));
+
+	// Calculate J_mat and K_mat on GPU using eval_Jmat_RSCF and eval_Kmat_RSCF
+	eval_Jmat_RSCF(system, rys_root, Schwarz_mat, schwarz_tol, schwarz_max, Pa_mat, J_mat, rys_root_dim1);
+	eval_Kmat_RSCF(system, rys_root, Schwarz_mat, schwarz_tol, schwarz_max, Pa_mat, K_mat, rys_root_dim1);
+
+	// Calculate G_mat = 2 * J_mat - K_mat on GPU using eval_Gmat_RSCF_kernel
+	int blockSize = 256;
+	int numBlocks = (nbasis * nbasis + blockSize - 1) / blockSize;
+	eval_Gmat_RSCF_kernel<<<numBlocks, blockSize>>>(J_mat, K_mat, G_mat, nbasis);
+
+	return 0;
+}
+
+__global__ void eval_Jmat_RSCF_kernel(AOGPU* d_mAOs, double* d_rys_root, double* d_Schwarz_mat, 
+		double schwarz_tol_sq, double schwarz_max, int nbasis, double* d_Pa_mat, double* d_J_mat, int rys_root_dim1) {
+    int mu = blockIdx.x;
+    int nu = blockIdx.y;
+
+	//print rys_root and Schwarz_mat to debug
+	// printf("rys_root = \n");
+	// for (int i = 0; i < 5; i++){
+	// 	for (int j = 0; j < 6; j++){
+	// 		printf("%f ", d_rys_root[j * rys_root_dim1 + i]);
 	// 	}
+	// 	printf("\n");
+	// }
+	// printf("Schwarz_mat = \n");
+	// for (int i = 0; i < nbasis; i++){
+	// 	for (int j = 0; j < nbasis; j++){
+	// 		printf("%f ", d_Schwarz_mat[i  + j* nbasis]);
+	// 	}
+	// 	printf("\n");
 	// }
 
+    if (mu >= nbasis || nu >= nbasis || mu > nu) {
+        return;
+    }
 
-	return 0;
+    if (d_Schwarz_mat[nu * nbasis + mu] * schwarz_max < schwarz_tol_sq) {
+        return;
+    }
+
+    int index = threadIdx.x + blockDim.x * blockIdx.z;
+    int si = index / nbasis;
+    int la = index % nbasis;
+
+    // Use shared memory to store partial sums
+    __shared__ double partial_sums[threadsPerBlock_forNbasisSquare];
+
+    // Initialize shared memory
+    partial_sums[threadIdx.x] = 0;
+
+    if (si < nbasis && la < nbasis) {
+        AOGPU AO_mu = d_mAOs[mu];
+        AOGPU AO_nu = d_mAOs[nu];
+        AOGPU AO_si = d_mAOs[si];
+        AOGPU AO_la = d_mAOs[la];
+        
+		if (d_Schwarz_mat[nu * nbasis + mu] * d_Schwarz_mat[la * nbasis + si] > schwarz_tol_sq) {
+            double value = eval_2eint(d_rys_root, AO_mu, AO_nu, AO_si, AO_la, rys_root_dim1) * d_Pa_mat[la * nbasis + si];
+			// print index, R0, lmn of all AOs and eval_2eint value to debug
+			// printf("mu = %d, nu = %d, si = %d, la = %d, value = %f\n", mu, nu, si, la, value);
+			// printf("mu index = %d, R0 = (%f, %f, %f), lmn = (%d, %d, %d)\n", mu, AO_mu.R0[0], AO_mu.R0[1], AO_mu.R0[2], AO_mu.lmn[0], AO_mu.lmn[1], AO_mu.lmn[2]);
+			// printf("nu index = %d, R0 = (%f, %f, %f), lmn = (%d, %d, %d)\n", nu, AO_nu.R0[0], AO_nu.R0[1], AO_nu.R0[2], AO_nu.lmn[0], AO_nu.lmn[1], AO_nu.lmn[2]);
+			// printf("si index = %d, R0 = (%f, %f, %f), lmn = (%d, %d, %d)\n", si, AO_si.R0[0], AO_si.R0[1], AO_si.R0[2], AO_si.lmn[0], AO_si.lmn[1], AO_si.lmn[2]);
+			// printf("la index = %d, R0 = (%f, %f, %f), lmn = (%d, %d, %d)\n", la, AO_la.R0[0], AO_la.R0[1], AO_la.R0[2], AO_la.lmn[0], AO_la.lmn[1], AO_la.lmn[2]);
+			
+			
+            partial_sums[threadIdx.x] = value;
+        }
+    }
+
+    __syncthreads();
+
+    // Perform parallel reduction
+    for (int stride = threadsPerBlock_forNbasisSquare / 2; stride > 0; stride /= 2) {
+        if (threadIdx.x < stride) {
+            partial_sums[threadIdx.x] += partial_sums[threadIdx.x + stride];
+        }
+        __syncthreads();
+    }
+
+    // The first thread in the block updates the J_mat with the accumulated value
+    if (threadIdx.x == 0) {
+        atomicAdd(&d_J_mat[nu * nbasis + mu], partial_sums[0]);
+        if(mu != nu)
+            atomicAdd(&d_J_mat[mu * nbasis + nu], partial_sums[0]);
+		// print J_mat[nu * nbasis + mu] and J_mat[mu * nbasis + nu] to debug
+		// printf("J_mat[%d, %d] = %f, J_mat[%d, %d] = %f\n", nu, mu, d_J_mat[nu * nbasis + mu], mu, nu, d_J_mat[mu * nbasis + nu]);
+    }
 }
 
-int eval_Jmat_RSCF(Molecule_basis& system, arma::mat& rys_root, arma::mat& Schwarz_mat, double schwarz_tol, arma::mat &Pa_mat, arma::mat &J_mat){
-	// F = H + G, G is the two-electron part of the Fock matrix
-	// G_{mu nu} = \sum_{si,la}[2(mu nu | si la) - (mu la | si nu)] P_{si la}
+int eval_Jmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz_mat, double schwarz_tol, double schwarz_max, 
+		double *Pa_mat, double *J_mat, int rys_root_dim1){
 
-	int nbasis = system.mAOs.size();
-	// arma::mat rys_root;
-	
-	double schwarz_tol_sq = schwarz_tol * schwarz_tol;
-	double schwarz_max = Schwarz_mat.max();
-	
-	// direct SCF - we won't be saving (mu nu | si la)'s
-	// pragma omp parallel for
-	for (int mu = 0; mu < nbasis; mu++){
-		AO AO_mu = system.mAOs[mu];
-		for (int nu = mu; nu < nbasis; nu++){ // simple symmetry
-			// each mu nu can be handled bu one GPU block thread
-			if (Schwarz_mat(mu, nu) * schwarz_max < schwarz_tol_sq)
-				continue;
-			AO AO_nu = system.mAOs[nu];
-			double Jmunu = 0;
-			for (int si = 0; si < nbasis; si++){
-				AO AO_si = system.mAOs[si];
-				if (Schwarz_mat(mu, nu) * Schwarz_mat(si, si) > schwarz_tol_sq)
-					Jmunu += eval_2eint(rys_root, AO_mu, AO_nu, AO_si, AO_si) * Pa_mat(si, si);
-				for (int la = si + 1; la < nbasis; la++){
-					AO AO_la = system.mAOs[la];
-					if (Schwarz_mat(mu, nu) * Schwarz_mat(si, la) > schwarz_tol_sq)
-						Jmunu += 2 * eval_2eint(rys_root, AO_mu, AO_nu, AO_si, AO_la) * Pa_mat(si, la);
-				}
-			}
-			J_mat(mu, nu) = Jmunu;
-			J_mat(nu, mu) = Jmunu;
-		}
-	}
+	int nbasis = system.num_ao;
+    double schwarz_tol_sq = schwarz_tol * schwarz_tol;
 
+    // Define the grid and block dimensions
+	int threadsPerBlock = threadsPerBlock_forNbasisSquare; 
+	int gridDimZ = (nbasis * nbasis + threadsPerBlock - 1) / threadsPerBlock;
+	dim3 blockDim(threadsPerBlock);
+	dim3 gridDim(nbasis, nbasis, gridDimZ);
+	// dim3 blockDim(1);
+	// dim3 gridDim(1, 1, 1);
+    
+    // Call the kernel
+    eval_Jmat_RSCF_kernel<<<gridDim, blockDim>>>(system.mAOs, rys_root, Schwarz_mat, schwarz_tol_sq, schwarz_max, 
+			nbasis, Pa_mat, J_mat, rys_root_dim1);
 
-	return 0;
+    // Wait for the kernel to finish execution and check for errors
+    cudaDeviceSynchronize();
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("Error in eval_Jmat_RSCF_kernel: %s\n", cudaGetErrorString(err));
+        return 1;
+    }
+    return 0;
 }
 
-int eval_Kmat_RSCF(Molecule_basis& system, arma::mat& rys_root, arma::mat& Schwarz_mat, double schwarz_tol, arma::mat &Pa_mat, arma::mat &K_mat){
-	// F = H + G, G is the two-electron part of the Fock matrix
-	// G_{mu nu} = \sum_{si,la}[2(mu nu | si la) - (mu la | si nu)] P_{si la}
+__global__ void eval_Kmat_RSCF_kernel(AOGPU* d_mAOs, double* d_rys_root, double* d_Schwarz_mat, double schwarz_tol_sq, int nbasis, double* d_Pa_mat, double* d_K_mat, int rys_root_dim1) {
+    int mu = blockIdx.x;
+    int nu = blockIdx.y;
 
-	int nbasis = system.mAOs.size();
-	// arma::mat rys_root;
-	
-	double schwarz_tol_sq = schwarz_tol * schwarz_tol;
-	double schwarz_max = Schwarz_mat.max();
-	
-	// direct SCF - we won't be saving (mu nu | si la)'s
-	// pragma omp parallel for
-	for (int mu = 0; mu < nbasis; mu++){
-		AO AO_mu = system.mAOs[mu];
-		for (int nu = mu; nu < nbasis; nu++){ // simple symmetry
-			// each mu nu can be handled bu one GPU block thread
-			AO AO_nu = system.mAOs[nu];
-			double Kmunu = 0;
-			for (int si = 0; si < nbasis; si++){
-				AO AO_si = system.mAOs[si];
-				for (int la = 0; la < nbasis; la++){
-					AO AO_la = system.mAOs[la];
-					if (Schwarz_mat(mu, la) * Schwarz_mat(si, nu) > schwarz_tol_sq)
-						Kmunu += eval_2eint(rys_root, AO_mu, AO_la, AO_si, AO_nu) * Pa_mat(si, la);
-				}
-			}
-			K_mat(mu, nu) = Kmunu;
-			K_mat(nu, mu) = Kmunu;
-		}
-	}
+    if (mu >= nbasis || nu >= nbasis || mu > nu) {
+        return;
+    }
 
+    int index = threadIdx.x + blockDim.x * blockIdx.z;
+    int si = index % nbasis;
+    int la = index / nbasis;
 
-	return 0;
+    // Use shared memory to store partial sums
+    __shared__ double partial_sums[threadsPerBlock_forNbasisSquare];
+
+    // Initialize shared memory
+    partial_sums[threadIdx.x] = 0;
+
+    if (si < nbasis && la < nbasis) {
+        AOGPU AO_mu = d_mAOs[mu];
+        AOGPU AO_nu = d_mAOs[nu];
+        AOGPU AO_si = d_mAOs[si];
+        AOGPU AO_la = d_mAOs[la];
+
+        if (d_Schwarz_mat[la * nbasis + mu] * d_Schwarz_mat[nu * nbasis + si] > schwarz_tol_sq) {
+            double value = eval_2eint(d_rys_root, AO_mu, AO_la, AO_si, AO_nu, rys_root_dim1) * d_Pa_mat[la * nbasis + si];
+            partial_sums[threadIdx.x] = value;
+        }
+    }
+
+    __syncthreads();
+
+    // Perform parallel reduction
+    for (int stride = threadsPerBlock_forNbasisSquare / 2; stride > 0; stride /= 2) {
+        if (threadIdx.x < stride) {
+            partial_sums[threadIdx.x] += partial_sums[threadIdx.x + stride];
+        }
+        __syncthreads();
+    }
+
+    // The first thread in the block updates the K_mat with the accumulated value
+    if (threadIdx.x == 0) {
+        atomicAdd(&d_K_mat[nu * nbasis + mu], partial_sums[0]);
+        if(mu != nu)
+            atomicAdd(&d_K_mat[mu * nbasis + nu], partial_sums[0]);
+    }
+}
+
+int eval_Kmat_RSCF(Molecule_basisGPU& system, double* rys_root, double* Schwarz_mat, double schwarz_tol, double schwarz_max, double* Pa_mat, double* K_mat, int rys_root_dim1) {
+    int nbasis = system.num_ao;
+    double schwarz_tol_sq = schwarz_tol * schwarz_tol;
+
+    // Define the grid and block dimensions
+	int threadsPerBlock = threadsPerBlock_forNbasisSquare;
+	int gridDimZ = (nbasis * nbasis + threadsPerBlock - 1) / threadsPerBlock;
+	dim3 blockDim(threadsPerBlock);
+	dim3 gridDim(nbasis, nbasis, gridDimZ);
+
+    // Call the kernel
+    eval_Kmat_RSCF_kernel<<<gridDim, blockDim>>>(system.mAOs, rys_root, Schwarz_mat, schwarz_tol_sq, nbasis, Pa_mat, K_mat, rys_root_dim1);
+
+    // Wait for the kernel to finish execution and check for errors
+    cudaDeviceSynchronize();
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("Error in eval_Kmat_RSCF_kernel: %s\n", cudaGetErrorString(err));
+        return 1;
+    }
+    return 0;
 }
 
 
-int eval_Schwarzmat(Molecule_basis& system, arma::mat& rys_root, arma::mat& Schwarz_mat){
-	// evaluate (mu nu | mu nu) for Schwarz prescreening
-	int nbasis = system.mAOs.size();
-
-	for (size_t mu = 0; mu < nbasis; mu++){
-		AO AO_mu = system.mAOs[mu];
-		for (size_t nu = mu; nu < nbasis; nu++){
-			AO AO_nu = system.mAOs[nu];
-			double Schmunu = eval_2eint(rys_root, AO_mu, AO_nu, AO_mu, AO_nu);
-			Schwarz_mat(mu, nu) = Schmunu;
-			Schwarz_mat(nu, mu) = Schmunu;
-		}
-	}
-
-	return 0;
+// the GPU kernal for eval_Schwarzmat
+__global__ void eval_Schwarzmat_GPU(AOGPU * mAOs, double *rys_root, double *Schwarz_mat, int nbasis, int rys_root_dim1){
+	int mu = blockIdx.x * blockDim.x + threadIdx.x;
+	int nu = blockIdx.y * blockDim.y + threadIdx.y;
+	if (mu >= nbasis || nu >= nbasis || mu > nu)
+		return;
+	// each thread handles one (mu nu) pair
+	AOGPU AO_mu = mAOs[mu];
+	AOGPU AO_nu = mAOs[nu];
+	double Schmunu = eval_2eint(rys_root, AO_mu, AO_nu, AO_mu, AO_nu, rys_root_dim1);
+	Schwarz_mat[mu * nbasis + nu] = Schmunu;
+	Schwarz_mat[nu * nbasis + mu] = Schmunu;
 }
 
 
-double eval_2eint(arma::mat& rys_root, AO& AO_i, AO& AO_j, AO& AO_k, AO& AO_l){
+
+
+
+__device__ double eval_2eint(double *rys_root, AOGPU& AO_i, AOGPU& AO_j, AOGPU& AO_k, AOGPU& AO_l, int rys_root_dim1){
 	// some dirty work
 
 	// center coordinates
-	double xi = AO_i.R0(0); double xj = AO_j.R0(0); double xk = AO_k.R0(0); double xl = AO_l.R0(0);
-	double yi = AO_i.R0(1); double yj = AO_j.R0(1); double yk = AO_k.R0(1); double yl = AO_l.R0(1);
-	double zi = AO_i.R0(2); double zj = AO_j.R0(2); double zk = AO_k.R0(2); double zl = AO_l.R0(2);
+	double xi = AO_i.R0[0]; double xj = AO_j.R0[0]; double xk = AO_k.R0[0]; double xl = AO_l.R0[0];
+	double yi = AO_i.R0[1]; double yj = AO_j.R0[1]; double yk = AO_k.R0[1]; double yl = AO_l.R0[1];
+	double zi = AO_i.R0[2]; double zj = AO_j.R0[2]; double zk = AO_k.R0[2]; double zl = AO_l.R0[2];
 
 	// angular momentums
-	int nix = AO_i.lmn(0); int njx = AO_j.lmn(0); int nkx = AO_k.lmn(0); int nlx = AO_l.lmn(0);
-	int niy = AO_i.lmn(1); int njy = AO_j.lmn(1); int nky = AO_k.lmn(1); int nly = AO_l.lmn(1);
-	int niz = AO_i.lmn(2); int njz = AO_j.lmn(2); int nkz = AO_k.lmn(2); int nlz = AO_l.lmn(2);
+	int nix = AO_i.lmn[0]; int njx = AO_j.lmn[0]; int nkx = AO_k.lmn[0]; int nlx = AO_l.lmn[0];
+	int niy = AO_i.lmn[1]; int njy = AO_j.lmn[1]; int nky = AO_k.lmn[1]; int nly = AO_l.lmn[1];
+	int niz = AO_i.lmn[2]; int njz = AO_j.lmn[2]; int nkz = AO_k.lmn[2]; int nlz = AO_l.lmn[2];
 
 	// number of contracted orbitals
-	int Ni = AO_i.alpha.n_elem; int Nj = AO_j.alpha.n_elem; int Nk = AO_k.alpha.n_elem; int Nl = AO_l.alpha.n_elem;
+	int Ni = AO_i.len; int Nj = AO_j.len; int Nk = AO_k.len; int Nl = AO_l.len;
 
 	double int_val = 0;
-	for (size_t i = 0; i < Ni; i++){
-		for (size_t j = 0; j < Nj; j++){
-			for (size_t k = 0; k < Nk; k++){
-				for (size_t l = 0; l < Nl; l++){
+	for (int i = 0; i < Ni; i++){
+		for (int j = 0; j < Nj; j++){
+			for (int k = 0; k < Nk; k++){
+				for (int l = 0; l < Nl; l++){
 					// calculates (i j | k l) where each of those are primitive Gaussians
 
-					double ai = AO_i.alpha(i); double aj = AO_j.alpha(j); double ak = AO_k.alpha(k); double al = AO_l.alpha(l);
+					double ai = AO_i.alpha[i]; double aj = AO_j.alpha[j]; double ak = AO_k.alpha[k]; double al = AO_l.alpha[l];
 	                double A = ai + aj;
 	                double B = ak + al;
 	                double rho = A*B / (A+B);
@@ -218,19 +307,24 @@ double eval_2eint(arma::mat& rys_root, AO& AO_i, AO& AO_j, AO& AO_k, AO& AO_l){
 	                
 	                double X = Dx + Dy + Dz;
 	                double t1, t2, t3, w1, w2, w3;
-	                rysroot(rys_root, X, t1, t2, t3, w1, w2, w3);
+	                rysroot(rys_root, X, t1, t2, t3, w1, w2, w3, rys_root_dim1);
 	                
-	                double prodcoeff = AO_i.d_coe(i)* AO_j.d_coe(j)* AO_k.d_coe(k)* AO_l.d_coe(l)* 2*sqrt(rho/M_PI);
-	                double int1 = w1*prodcoeff*Ix_calc(t1,xi,xj,xk,xl,ai,aj,ak,al,nix,njx,nkx,nlx)
+	                double prodcoeff = AO_i.d_coe[i]* AO_j.d_coe[j]* AO_k.d_coe[k]* AO_l.d_coe[l]* 2*sqrt(rho/M_PI);
+	                double integral1 = w1*prodcoeff*Ix_calc(t1,xi,xj,xk,xl,ai,aj,ak,al,nix,njx,nkx,nlx)
 	                                   		  *Ix_calc(t1,yi,yj,yk,yl,ai,aj,ak,al,niy,njy,nky,nly)
 	                                   		  *Ix_calc(t1,zi,zj,zk,zl,ai,aj,ak,al,niz,njz,nkz,nlz);
-	                double int2 = w2*prodcoeff*Ix_calc(t2,xi,xj,xk,xl,ai,aj,ak,al,nix,njx,nkx,nlx)
+	                double integral2 = w2*prodcoeff*Ix_calc(t2,xi,xj,xk,xl,ai,aj,ak,al,nix,njx,nkx,nlx)
 	                                   		  *Ix_calc(t2,yi,yj,yk,yl,ai,aj,ak,al,niy,njy,nky,nly)
 	                                   		  *Ix_calc(t2,zi,zj,zk,zl,ai,aj,ak,al,niz,njz,nkz,nlz);
-	                double int3 = w3*prodcoeff*Ix_calc(t3,xi,xj,xk,xl,ai,aj,ak,al,nix,njx,nkx,nlx)
+	                double integral3 = w3*prodcoeff*Ix_calc(t3,xi,xj,xk,xl,ai,aj,ak,al,nix,njx,nkx,nlx)
 	                                   		  *Ix_calc(t3,yi,yj,yk,yl,ai,aj,ak,al,niy,njy,nky,nly)
 	                                   		  *Ix_calc(t3,zi,zj,zk,zl,ai,aj,ak,al,niz,njz,nkz,nlz);
-	                int_val += int1 + int2 + int3;
+	                int_val += integral1 + integral2 + integral3;
+					// // print all to debug
+					// printf("i: %d, j: %d, k: %d, l: %d, int1: %f, int2: %f, int3: %f\n", i, j, k, l, integral1, integral2, integral3);
+					// print t1,xi,xj,xk,xl,ai,aj,ak,al,nix,njx,nkx,nlx
+					// printf("t1: %f, xi: %f, xj: %f, xk: %f, xl: %f, ai: %f, aj: %f, ak: %f, al: %f, nix: %d, njx: %d, nkx: %d, nlx: %d\n", t1, xi, xj, xk, xl, ai, aj, ak, al, nix, njx, nkx, nlx);
+					
 				}
 			}
 		}
@@ -239,7 +333,7 @@ double eval_2eint(arma::mat& rys_root, AO& AO_i, AO& AO_j, AO& AO_k, AO& AO_l){
 
 }
 
-double lagrange_interpolate(double& X, double& flr, double& mid, double& cel){
+__device__ double lagrange_interpolate(double X, double flr, double mid, double cel){
 	// 3 point lagrange interpolation -- flr .. X .. mid .. cel
 	double flr_X = 0.01 * std::floor(X / 0.01);
 	double mid_X = flr_X + 0.01;
@@ -248,8 +342,7 @@ double lagrange_interpolate(double& X, double& flr, double& mid, double& cel){
 	return flr*(X-mid_X)*(X-cel_X)/0.0002 - mid*(X-flr_X)*(X-cel_X)/0.0001 + cel*(X-mid_X)*(X-flr_X)/0.0002;
 }
 
-
-void rysroot(arma::mat& rys_root, double& X, double& t1, double& t2, double& t3, double& w1, double& w2, double& w3){
+__device__ void rysroot(double *rys_root, double X, double& t1, double& t2, double& t3, double& w1, double& w2, double& w3, int rys_root_dim1){
 	// if X <= 30, read from table (X = 0 case is actually Legendre polynomial, rysroot.m doesn't compute that case)
 	// if X > 30, use Hermite polynomial n = 6
 	if (X <= 29.99){
@@ -278,7 +371,7 @@ void rysroot(arma::mat& rys_root, double& X, double& t1, double& t2, double& t3,
 }
 
 
-double Ix_calc(double& t2, double& xi, double& xj, double& xk, double& xl, double& ai, double& aj, double& ak, double& al, int& nix, int& njx, int& nkx, int& nlx){
+__device__ double Ix_calc(double t2, double xi, double xj, double xk, double xl, double ai, double aj, double ak, double al, int nix, int njx, int nkx, int nlx){
 	// compute Ix(t2) values
 	// arrange ijkl order to properly ordered integrals and call Ix_calc_(ordered)
 
@@ -337,7 +430,7 @@ double Ix_calc(double& t2, double& xi, double& xj, double& xk, double& xl, doubl
 }
 
 
-double Ix_calc_ssss(double& t2, double& xi, double& xj, double& xk, double& xl, double& ai, double& aj, double& ak, double& al){
+__device__ double Ix_calc_ssss(double t2, double xi, double xj, double xk, double xl, double ai, double aj, double ak, double al){
 	double A = ai + aj;
 	double B = ak + al;
 	double Gx = ai*aj/(ai+aj)*(xi-xj)*(xi-xj)+ak*al/(ak+al)*(xk-xl)*(xk-xl);
@@ -348,7 +441,7 @@ double Ix_calc_ssss(double& t2, double& xi, double& xj, double& xk, double& xl, 
 	return Ix;
 }
 
-double Ix_calc_psss(double& t2, double& xi, double& xj, double& xk, double& xl, double& ai, double& aj, double& ak, double& al){
+__device__ double Ix_calc_psss(double t2, double xi, double xj, double xk, double xl, double ai, double aj, double ak, double al){
 	double xA = (ai*xi + aj*xj) / (ai+aj);
 	double xB = (ak*xk + al*xl) / (ak+al);
 	double A = ai + aj;
@@ -364,7 +457,7 @@ double Ix_calc_psss(double& t2, double& xi, double& xj, double& xk, double& xl, 
 	return Ix;
 }
 
-double Ix_calc_psps(double& t2, double& xi, double& xj, double& xk, double& xl, double& ai, double& aj, double& ak, double& al){
+__device__ double Ix_calc_psps(double t2, double xi, double xj, double xk, double xl, double ai, double aj, double ak, double al){
 	double xA = (ai*xi + aj*xj) / (ai+aj);
 	double xB = (ak*xk + al*xl) / (ak+al);
 	double A = ai + aj;
@@ -382,7 +475,7 @@ double Ix_calc_psps(double& t2, double& xi, double& xj, double& xk, double& xl, 
 	return Ix;
 }
 
-double Ix_calc_ppss(double& t2, double& xi, double& xj, double& xk, double& xl, double& ai, double& aj, double& ak, double& al){
+__device__ double Ix_calc_ppss(double t2, double xi, double xj, double xk, double xl, double ai, double aj, double ak, double al){
 	double xA = (ai*xi + aj*xj) / (ai+aj);
 	double xB = (ak*xk + al*xl) / (ak+al);
 	double A = ai + aj;
@@ -390,7 +483,6 @@ double Ix_calc_ppss(double& t2, double& xi, double& xj, double& xk, double& xl, 
 	double Gx = ai*aj/(ai+aj)*(xi-xj)*(xi-xj)+ak*al/(ak+al)*(xk-xl)*(xk-xl);
 
 	double C00 = (xA-xi) + B*(xB-xA)*t2/(A+B);
-	double B00 = t2 / (2*(A+B));
 	double B10 = 1/(2*A) - B*t2/(2*A*(A+B));
 
 	double G00 = M_PI / std::sqrt(A*B);
@@ -401,7 +493,7 @@ double Ix_calc_ppss(double& t2, double& xi, double& xj, double& xk, double& xl, 
 	return Ix;
 }
 
-double Ix_calc_ppps(double& t2, double& xi, double& xj, double& xk, double& xl, double& ai, double& aj, double& ak, double& al){
+__device__ double Ix_calc_ppps(double t2, double xi, double xj, double xk, double xl, double ai, double aj, double ak, double al){
 	double xA = (ai*xi + aj*xj) / (ai+aj);
 	double xB = (ak*xk + al*xl) / (ak+al);
 	double A = ai + aj;
@@ -423,7 +515,7 @@ double Ix_calc_ppps(double& t2, double& xi, double& xj, double& xk, double& xl, 
 	return Ix;
 }
 
-double Ix_calc_pppp(double& t2, double& xi, double& xj, double& xk, double& xl, double& ai, double& aj, double& ak, double& al){
+__device__ double Ix_calc_pppp(double t2, double xi, double xj, double xk, double xl, double ai, double aj, double ak, double al){
 	double xA = (ai*xi + aj*xj) / (ai+aj);
 	double xB = (ak*xk + al*xl) / (ak+al);
 	double A = ai + aj;

@@ -3,12 +3,14 @@
 
 #define ARMA_ALLOW_FAKE_GCC
 #include <armadillo>
-#include <basis/molecule_basis.h>
+#include <basis/molecule_basis.cuh>
 #include <math.h>
 
-int eval_Gmat_RSCF(Molecule_basis& system, arma::mat &rys_root, arma::mat& Schwarz_mat, double schwarz_tol, arma::mat &Pa_mat, arma::mat &G_mat);
-int eval_Jmat_RSCF(Molecule_basis& system, arma::mat &rys_root, arma::mat& Schwarz_mat, double schwarz_tol, arma::mat &Pa_mat, arma::mat &J_mat);
-int eval_Kmat_RSCF(Molecule_basis& system, arma::mat &rys_root, arma::mat& Schwarz_mat, double schwarz_tol, arma::mat &Pa_mat, arma::mat &K_mat);
-int eval_Schwarzmat(Molecule_basis& system, arma::mat &rys_root, arma::mat &Schwarz_mat);
+int eval_Gmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz_mat, double schwarz_tol, double *Pa_mat, double *G_mat, int rys_root_dim1);
+int eval_Jmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz_mat, double schwarz_tol, double schwarz_max, 
+        double *Pa_mat, double *J_mat, int rys_root_dim1);
+int eval_Kmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz_mat, double schwarz_tol, double schwarz_max, 
+        double *Pa_mat, double *K_mat, int rys_root_dim1);
+__global__ void eval_Schwarzmat_GPU(AOGPU * mAOs, double *rys_root, double *Schwarz_mat, int nbasis, int rys_root_dim1);
 
 #endif // JKMAT_H

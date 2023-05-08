@@ -66,6 +66,8 @@ int run_Halmitonian(std::string test_case, std::string hamiltonian_name){
 int main(int argc, char *argv[])
 {
   return
+    run_Halmitonian("H2", "hf")|
+    run_Halmitonian("H2", "hf_gpu")|
     run_Halmitonian("C2H4", "hf")|
     run_Halmitonian("C2H4", "hf_gpu")|
     0;
