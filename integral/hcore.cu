@@ -111,8 +111,8 @@ int eval_OVmat(Molecule_basisGPU& system, Molecule_basis& system_cpu, arma::mat 
 }
 
 
-int eval_Hcoremat(Molecule_basisGPU& system, Molecule_basis& system_cpu,arma::mat &H_mat){
-    const size_t nbsf = system.num_ao;
+int eval_Hcoremat(Molecule_basisGPU& system, Molecule_basis& system_cpu, arma::mat &H_mat){
+    const size_t nbsf = system_cpu.mAOs.size();
     printf("nbsf is  %d\n", nbsf);
     H_mat.set_size(nbsf,nbsf);
     // arma::mat T_mat(nbsf,nbsf), V_mat(nbsf,nbsf);
@@ -204,7 +204,9 @@ int eval_Hcoremat(Molecule_basisGPU& system, Molecule_basis& system_cpu,arma::ma
 
 
 
-    construct_V<<<num_blocks,NUM_THREADS>>>(V_mat_gpu, mAO_array_gpu, nbsf, p_start_ind, &system);
+    // construct_V<<<num_blocks,NUM_THREADS>>>(V_mat_gpu, mAO_array_gpu, nbsf, p_start_ind, &system);
+    construct_V<<<num_blocks,NUM_THREADS>>>(V_mat_gpu, mAO_array_gpu, nbsf, p_start_ind, system.Atom_coords, system.effective_charges, system.num_atom);
+
     cudaDeviceSynchronize();
     cudaStatus = cudaGetLastError();
     if (cudaStatus != cudaSuccess) {
@@ -219,10 +221,12 @@ int eval_Hcoremat(Molecule_basisGPU& system, Molecule_basis& system_cpu,arma::ma
     H_mat = T_mat + V_mat;
 
     T_mat.print("T_mat");
-    H_mat.print("H_mat");
+    
     V_mat.print("V_mat");
     H_mat = H_mat(undo_sorted_indices, undo_sorted_indices);
 
+    
+    H_mat.print("H_mat");
     return 0;
 }
 
@@ -354,7 +358,7 @@ __device__ void construct_T_block(double* Tmat,  AOGPU* mAOs, size_t mu_start_in
 
 }
 
-__device__ void construct_V_block(double* Vmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf, Molecule_basisGPU* mol, size_t tid){
+__device__ void construct_V_block(double* Vmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf, double* Atom_coords, const int* effective_charges, const int num_atom, size_t tid){
     // size_t tid = TID;
     // CHECK_TID // return if thread num exceeds num of elements in block
     if (tid >= num_mu*num_nu) return;
@@ -365,13 +369,13 @@ __device__ void construct_V_block(double* Vmat,  AOGPU* mAOs, size_t mu_start_in
     // arma::mat Vmat_block(Vmat + mu_start_ind + nu_start_ind*nbsf, num_mu, num_nu, false, true);
     // Vmat_block(mu,nu) = eval_Vmunu(mAOs[mu + mu_start_ind], mAOs[nu + nu_start_ind], mol);
     // printf("tid %d computing for mu= %d, nu=%d and mu_nu_ind=%d\n", int(tid), int(mu), int(nu), int(mu_nu_ind));
-    Vmat[mu_nu_ind] = eval_Vmunu(mAOs[mu + mu_start_ind], mAOs[nu + nu_start_ind], mol);
+    Vmat[mu_nu_ind] = eval_Vmunu(mAOs[mu + mu_start_ind], mAOs[nu + nu_start_ind], Atom_coords, effective_charges, num_atom);
     // printf("tid %d computes that Vmat[%d]= %1.2f\n", int(tid), int(mu_nu_ind),Vmat[mu_nu_ind]);
 
 }
 
 
-__global__ void construct_TV(double* Tmat, double* Vmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind, Molecule_basisGPU* mol){
+__global__ void construct_TV(double* Tmat, double* Vmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind, double* Atom_coords, const int* effective_charges,const int num_atom){
     size_t tid = threadIdx.x + blockIdx.x * blockDim.x;
     size_t p_dim = nbsf - p_start_ind;
     if (tid==0) printf("construct_TV beginning, p_dim is  %d, nbsf is %d \n", int(p_dim), int(nbsf));
@@ -391,7 +395,7 @@ __global__ void construct_TV(double* Tmat, double* Vmat, AOGPU* mAOs, size_t nbs
     // construct_V_block(Vmat, mAOs, p_start_ind, 0, p_dim, p_start_ind, nbsf, mol, tid); // ps
     // construct_V_block(Vmat, mAOs, 0, p_start_ind, p_start_ind, p_dim, nbsf, mol, tid); // sp
     // construct_V_block(Vmat, mAOs, p_start_ind, p_start_ind, p_dim, p_dim, nbsf, mol, tid); // pp
-    construct_V_block(Vmat, mAOs, 0,           0,           nbsf,  nbsf, nbsf, mol, tid); // ss
+    construct_V_block(Vmat, mAOs, 0,           0,           nbsf,  nbsf, nbsf, Atom_coords, effective_charges, num_atom, tid); // ss
     // printf("construct_T is done, tid %d\n", int(tid));
 
 }
@@ -410,11 +414,11 @@ __global__ void construct_T(double* Tmat, AOGPU* mAOs, size_t nbsf, size_t p_sta
 }
 
 
-__global__ void construct_V(double* Vmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind, Molecule_basisGPU* mol){
+__global__ void construct_V(double* Vmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind, double* Atom_coords, const int* effective_charges, const int num_atom){
     size_t tid = threadIdx.x + blockIdx.x * blockDim.x;
     size_t p_dim = nbsf - p_start_ind;
     if (tid==0) printf("construct_V beginning, p_dim is  %d, nbsf is %d \n", int(p_dim), int(nbsf));
-    construct_V_block(Vmat, mAOs, 0,           0,           nbsf,  nbsf, nbsf, mol, tid); // ss
+    construct_V_block(Vmat, mAOs, 0,           0,           nbsf,  nbsf, nbsf, Atom_coords, effective_charges, num_atom, tid); // ss
     // printf("construct_T is done, tid %d\n", int(tid));
 
 }
@@ -486,7 +490,7 @@ __device__ double eval_Tmunu(AOGPU &mu, AOGPU &nu){
 
 
 
-__device__ double eval_Vmunu(AOGPU &mu, AOGPU &nu, const Molecule_basisGPU* mol){
+__device__ double eval_Vmunu(AOGPU &mu, AOGPU &nu, double* Atom_coords, const int* effective_charges, const int num_atom){
     // nuclear attraction
     // assert(mu.alpha.size()==mu.d_coe.size() && nu.alpha.size()==nu.d_coe.size()); // This should be true?
     
@@ -503,10 +507,10 @@ __device__ double eval_Vmunu(AOGPU &mu, AOGPU &nu, const Molecule_basisGPU* mol)
     int n2 = nu.lmn[2];
     double* A = mu.R0; // pointer
     double* B = nu.R0;
-    for (size_t c = 0; c < (*mol).num_atom; c++){
+    for (size_t c = 0; c < num_atom; c++){
         // arma::vec C = mol.mAtoms[c].m_coord; // coordinates of the atom
-        double* C = (*mol).Atom_coords + 3*c; // pointer arithmetic to get starting point of C coords
-        int Z = (*mol).effective_charges[c];
+        double* C = Atom_coords + 3*c; // pointer arithmetic to get starting point of C coords
+        int Z = effective_charges[c];
         for (size_t mup = 0; mup < mu_no_primitives; mup++){
             double alpha = mu.alpha[mup];
             double d_kmu = mu.d_coe[mup];
@@ -742,7 +746,7 @@ __device__ double overlap(double* A,  int l1, int m1, int n1, double alpha, doub
     double prefactor = pow(M_PI/gamma,1.5) * exp(-alpha * beta * pow((A_vec-B_vec).norm(),2)/gamma);
     // printf("Finished prefactor\n");
     // printf("Calculating overlap 1d\n");
-    printf("P( %1.2f, %1.2f, %1.2f),A:( %1.2f, %1.2f, %1.2f), B( %1.2f, %1.2f, %1.2f), alpha (%1.2f), beta (%1.2f)\n", P[0], P[1], P[2],A[0], A[1], A[2],B[0], B[1], B[2], alpha, beta);
+    // printf("P( %1.2f, %1.2f, %1.2f),A:( %1.2f, %1.2f, %1.2f), B( %1.2f, %1.2f, %1.2f), alpha (%1.2f), beta (%1.2f)\n", P[0], P[1], P[2],A[0], A[1], A[2],B[0], B[1], B[2], alpha, beta);
     double sx = overlap_1d(l1,l2,P[0]-A[0],P[0]-B[0],gamma);
     double sy = overlap_1d(m1,m2,P[1]-A[1],P[1]-B[1],gamma);
     double sz = overlap_1d(n1,n2,P[2]-A[2],P[2]-B[2],gamma);
@@ -827,6 +831,8 @@ __device__ double nuclear_attraction(double *A,int l1, int m1, int n1,double alp
     double* Az = Az_vec.coords();
 
     double total = 0.0;
+
+    // printf("nuclear_attraction: reached for-loops\n");
     for (int I = 0; I < l1+l2+1; I++)
         for (int J = 0; J < m1+m2+1; J++)
             for (int K = 0; K < n1+n2+1; K++)
