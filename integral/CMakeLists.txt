@@ -7,7 +7,7 @@ set(SRC
     hcore.cpp
     JKmat.cpp
     HartreeFock_Rys.cpp
-    # hcore.cu
+    hcore.cu
     JKmat.cu
     HartreeFock_Rys_gpu.cu
 )

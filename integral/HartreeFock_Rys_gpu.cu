@@ -1,5 +1,5 @@
 #include "HartreeFock_Rys_gpu.cuh"
-#include "hcore.h"
+#include "hcore.cuh"
 #include "JKmat.cuh"
 #include <filesystem>
 #include <cuda_runtime_api.h>
