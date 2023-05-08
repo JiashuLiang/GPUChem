@@ -71,12 +71,6 @@ int eval_OVmat(Molecule_basisGPU& system, Molecule_basis& system_cpu, arma::mat 
     std::vector<AO> sorted_AOs;
     arma::uvec sorted_indices;
     
-    // Sort AOs by type. First, copy AOs from the device
-    std::cout<< "\n Copying AOs to CPU..\n" <<std::flush;
-    // AOGPU *unsorted_AOs = new AOGPU[nbsf];
-    // cudaMemcpy(unsorted_AOs, system.mAOs, nbsf*sizeof(AOGPU), cudaMemcpyDeviceToHost);
-    // AOGPU *unsorted_AOs = system_cpu.mAOs;
-    std::cout<< "\n Sorting AOs..\n"<<std::flush;
 
     size_t p_start_ind = sort_AOs(system_cpu.mAOs, sorted_AOs, sorted_indices);
 
@@ -85,62 +79,9 @@ int eval_OVmat(Molecule_basisGPU& system, Molecule_basis& system_cpu, arma::mat 
     // Perform construction of H, sorted into blocks of ss, sp, ps,pp
     
     // Copy Sorted AOs. In hindsight, probably unnecessary and couldve just copied via construct_TV;
-    std::cout<< "\n Sending AOs to GPU..\n"<<std::flush;
 
-    // AOGPU *mAO_array_gpu = (AOGPU*)malloc(nbsf*sizeof(AOGPU));
-    // memset(A_coords, 0.0, Imax*sizeof(double));
+
     AOGPU* mAO_array_gpu;
-    copy_AOs_to_gpu(sorted_AOs,mAO_array_gpu);
-
-    // Copy Smatrices
-    double *S_mat_ptr = S_mat.memptr();
-    double *S_mat_gpu;
-
-    cudaMalloc((void**)&S_mat_gpu, nbsf * nbsf* sizeof(double));
-    cudaMemcpy(S_mat_gpu, S_mat_ptr, nbsf * nbsf * sizeof(double), cudaMemcpyHostToDevice);
-
-    // MARKER
-    // Perform construction of S, sorted into blocks of ss, sp, ps,pp
-    int num_blocks = (nbsf * nbsf /NUM_THREADS)+ 1;
-    // construct_S(S_mat, sorted_AOs, p_start_ind);
-    construct_S<<<num_blocks,NUM_THREADS>>>(S_mat_gpu, mAO_array_gpu, nbsf, p_start_ind);
-    // return S_mat to its original order.
-    S_mat = S_mat(undo_sorted_indices, undo_sorted_indices);
-
-    return 0;
-}
-
-
-int eval_Hcoremat(Molecule_basisGPU& system, Molecule_basis& system_cpu, arma::mat &H_mat){
-    const size_t nbsf = system_cpu.mAOs.size();
-    printf("nbsf is  %d\n", nbsf);
-    H_mat.set_size(nbsf,nbsf);
-    // arma::mat T_mat(nbsf,nbsf), V_mat(nbsf,nbsf);
-    
-    // T_mat.zeros();
-    // V_mat.zeros();
-
-    // std::vector<AOGPU> sorted_AOs;
-    std::vector<AO> sorted_AOs;
-    arma::uvec sorted_indices;
-    
-    // Sort AOs by type. First, copy AOs from the device
-    // std::cout<< "\n Copying AOs to CPU..\n" <<std::flush;
-    // AOGPU *unsorted_AOs = new AOGPU[nbsf];
-    // cudaMemcpy(unsorted_AOs, system.mAOs, nbsf*sizeof(AOGPU), cudaMemcpyDeviceToHost);
-    // AOGPU *unsorted_AOs = system_cpu.mAOs;
-    std::cout<< "\n Sorting AOs..\n"<<std::flush;
-
-    size_t p_start_ind = sort_AOs(system_cpu.mAOs, sorted_AOs, sorted_indices);
-
-    arma::uvec undo_sorted_indices = arma::sort_index(sorted_indices);
-
-    // Perform construction of H, sorted into blocks of ss, sp, ps,pp
-    
-    // Copy Sorted AOs. In hindsight, probably unnecessary and couldve just copied via construct_TV;
-    std::cout<< "\n Sending AOs to GPU..\n"<<std::flush;
-    AOGPU* mAO_array_gpu;
-    // copy_AOs_to_gpu(sorted_AOs,mAO_array_gpu);
 
 
     int num_ao = sorted_AOs.size();
@@ -170,28 +111,80 @@ int eval_Hcoremat(Molecule_basisGPU& system, Molecule_basis& system_cpu, arma::m
     }
 
 
+    // Copy Smatrices
+    double *S_mat_ptr = new double[nbsf*nbsf];
+    double *S_mat_gpu;
+
+    cudaMalloc((void**)&S_mat_gpu, nbsf * nbsf* sizeof(double));
+    cudaMemset(S_mat_gpu, 0.0, sizeof(double) * nbsf*nbsf);
+
+    // MARKER
+    // Perform construction of S, sorted into blocks of ss, sp, ps,pp
+    int num_blocks = (nbsf * nbsf /NUM_THREADS)+ 1;
+    // construct_S(S_mat, sorted_AOs, p_start_ind);
+    construct_S<<<num_blocks,NUM_THREADS>>>(S_mat_gpu, mAO_array_gpu, nbsf, p_start_ind);
+    // return S_mat to its original order.
+    S_mat = S_mat(undo_sorted_indices, undo_sorted_indices);
+
+    return 0;
+}
 
 
-    printmAOs<<<2,6>>>(mAO_array_gpu);
-    cudaDeviceSynchronize();
-    // sayHello<<<2,6>>>();
+int eval_Hcoremat(Molecule_basisGPU& system, Molecule_basis& system_cpu, arma::mat &H_mat){
+    const size_t nbsf = system_cpu.mAOs.size();
+    H_mat.set_size(nbsf,nbsf);
+
+    // Carry out sorting AOs on CPU
+    std::vector<AO> sorted_AOs;
+    arma::uvec sorted_indices;
+    size_t p_start_ind = sort_AOs(system_cpu.mAOs, sorted_AOs, sorted_indices);
+    arma::uvec undo_sorted_indices = arma::sort_index(sorted_indices);
+
+    // Perform construction of H, sorted into blocks of ss, sp, ps,pp
+    
+    // Copy Sorted AOs. In hindsight, probably unnecessary and couldve just copied via construct_TV;
+    AOGPU* mAO_array_gpu;
+    int num_ao = sorted_AOs.size();
+    // Allocate memory on the GPU for the mAOs array
+    cudaMalloc((void**)&mAO_array_gpu, num_ao * sizeof(AOGPU));
+    // Allocate and copy AO data to the GPU
+    for (size_t i = 0; i < num_ao; i++) {
+        AOGPU ao_gpu;
+        // Set length of AOGPU
+        ao_gpu.len = sorted_AOs[i].len;
+        
+        // Allocate memory on the GPU
+        cudaMalloc((void**)&ao_gpu.R0, 3 * sizeof(double));
+        cudaMalloc((void**)&ao_gpu.lmn, 3 * sizeof(unsigned int));
+        cudaMalloc((void**)&ao_gpu.alpha, ao_gpu.len * sizeof(double));
+        cudaMalloc((void**)&ao_gpu.d_coe, ao_gpu.len * sizeof(double));
+
+        // Copy the data from the CPU to the GPU
+        cudaMemcpy(ao_gpu.R0, sorted_AOs[i].R0.memptr(), 3 * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(ao_gpu.lmn, sorted_AOs[i].lmn.memptr(), 3 * sizeof(unsigned int), cudaMemcpyHostToDevice);
+        cudaMemcpy(ao_gpu.alpha, sorted_AOs[i].alpha.memptr(), ao_gpu.len * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(ao_gpu.d_coe, sorted_AOs[i].d_coe.memptr(), ao_gpu.len * sizeof(double), cudaMemcpyHostToDevice);
+
+        // Copy the AOGPU object to the mAOs array on the GPU
+        cudaMemcpy(mAO_array_gpu + i, &ao_gpu, sizeof(AOGPU), cudaMemcpyHostToDevice);
+    }
+
+
+
+
     // Copy T and V matrices
     double *T_mat_ptr = new double[nbsf*nbsf];
     double *V_mat_ptr = new double[nbsf*nbsf]; //= V_mat.memptr();
     double *T_mat_gpu, *V_mat_gpu;
 
     cudaMalloc((void**)&T_mat_gpu, nbsf * nbsf* sizeof(double));
-    // cudaMemcpy(T_mat_gpu, T_mat_ptr, nbsf * nbsf * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemset(T_mat_gpu, 0.0, sizeof(double) * nbsf*nbsf);
     
     cudaMalloc((void**)&V_mat_gpu, nbsf * nbsf* sizeof(double));
-    // cudaMemcpy(V_mat_gpu, V_mat_ptr, nbsf * nbsf * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemset(V_mat_gpu, 0.0, sizeof(double) * nbsf*nbsf);
 
     int num_blocks = (nbsf * nbsf /NUM_THREADS)+ 1;
-    std::cout<< "\n Constructing TV, num_blocks is "<< num_blocks <<std::endl;
-
-    // construct_TV<<<num_blocks,NUM_THREADS>>>(T_mat_gpu,  V_mat_gpu, mAO_array_gpu, nbsf, p_start_ind, &system);
+    //Construct Tmat
     construct_T<<<num_blocks,NUM_THREADS>>>(T_mat_gpu,  mAO_array_gpu, nbsf, p_start_ind);
     cudaDeviceSynchronize();
     cudaError_t cudaStatus = cudaGetLastError();
@@ -201,12 +194,8 @@ int eval_Hcoremat(Molecule_basisGPU& system, Molecule_basis& system_cpu, arma::m
     }
     cudaMemcpy(T_mat_ptr, T_mat_gpu,  nbsf * nbsf * sizeof(double), cudaMemcpyDeviceToHost);
 
-
-
-
-    // construct_V<<<num_blocks,NUM_THREADS>>>(V_mat_gpu, mAO_array_gpu, nbsf, p_start_ind, &system);
+    //Construct Vmat
     construct_V<<<num_blocks,NUM_THREADS>>>(V_mat_gpu, mAO_array_gpu, nbsf, p_start_ind, system.Atom_coords, system.effective_charges, system.num_atom);
-
     cudaDeviceSynchronize();
     cudaStatus = cudaGetLastError();
     if (cudaStatus != cudaSuccess) {
@@ -215,18 +204,17 @@ int eval_Hcoremat(Molecule_basisGPU& system, Molecule_basis& system_cpu, arma::m
     }
     cudaMemcpy(V_mat_ptr, V_mat_gpu, nbsf * nbsf * sizeof(double), cudaMemcpyDeviceToHost);
     
-    std::cout<< "\n Tmat matrix first element is " << T_mat_ptr[0]<<std::endl;
     arma::mat T_mat(T_mat_ptr,nbsf,nbsf,true,false);
     arma::mat V_mat(V_mat_ptr,nbsf,nbsf,true,false);
     H_mat = T_mat + V_mat;
 
-    T_mat.print("T_mat");
+    // T_mat.print("T_mat");
     
-    V_mat.print("V_mat");
+    // V_mat.print("V_mat");
     H_mat = H_mat(undo_sorted_indices, undo_sorted_indices);
 
     
-    H_mat.print("H_mat");
+    // H_mat.print("H_mat");
     return 0;
 }
 
@@ -388,9 +376,6 @@ __global__ void construct_TV(double* Tmat, double* Vmat, AOGPU* mAOs, size_t nbs
     // construct_T_block(Tmat, mAOs, p_start_ind, p_start_ind, p_dim,        p_dim, nbsf, tid); // pp
     construct_T_block(Tmat, mAOs, 0,           0,           nbsf,  nbsf, nbsf, tid); // ss
     
-    if (tid==0) printf("construct_T is done, tid %d\n", int(tid));
-    if (tid==0) printf(" Tmat[0]= %1.2f\n",Tmat[0]);
-
     // construct_V_block(Vmat, mAOs, 0, 0, p_start_ind, p_start_ind, nbsf, mol, tid); // ss
     // construct_V_block(Vmat, mAOs, p_start_ind, 0, p_dim, p_start_ind, nbsf, mol, tid); // ps
     // construct_V_block(Vmat, mAOs, 0, p_start_ind, p_start_ind, p_dim, nbsf, mol, tid); // sp
@@ -403,24 +388,16 @@ __global__ void construct_TV(double* Tmat, double* Vmat, AOGPU* mAOs, size_t nbs
 
 __global__ void construct_T(double* Tmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind){
     size_t tid = threadIdx.x + blockIdx.x * blockDim.x;
-    size_t p_dim = nbsf - p_start_ind;
-    if (tid==0) printf("construct_T beginning, p_dim is  %d, nbsf is %d \n", int(p_dim), int(nbsf));
-
+    // size_t p_dim = nbsf - p_start_ind;
     construct_T_block(Tmat, mAOs, 0,           0,           nbsf,  nbsf, nbsf, tid); // ss
-    
-    if (tid==0) printf("construct_T is done, tid %d\n", int(tid));
-    if (tid==0) printf(" Tmat[0]= %1.2f\n",Tmat[0]);
 
 }
 
 
 __global__ void construct_V(double* Vmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind, double* Atom_coords, const int* effective_charges, const int num_atom){
     size_t tid = threadIdx.x + blockIdx.x * blockDim.x;
-    size_t p_dim = nbsf - p_start_ind;
-    if (tid==0) printf("construct_V beginning, p_dim is  %d, nbsf is %d \n", int(p_dim), int(nbsf));
+    // size_t p_dim = nbsf - p_start_ind;
     construct_V_block(Vmat, mAOs, 0,           0,           nbsf,  nbsf, nbsf, Atom_coords, effective_charges, num_atom, tid); // ss
-    // printf("construct_T is done, tid %d\n", int(tid));
-
 }
 
 
