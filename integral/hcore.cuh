@@ -44,7 +44,7 @@ public:
         for (int i = 0; i < m_size; ++i) {
             sum_of_squares += m_coords[i] * m_coords[i];
         }
-        return sqrtf(sum_of_squares);
+        return sqrt(sum_of_squares);
     }
     // Scalar multiplication operator
     __device__ vector_gpu operator*(double scalar) const {
