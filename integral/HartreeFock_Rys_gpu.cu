@@ -7,9 +7,10 @@
 #include <thrust/device_ptr.h>
 #include <thrust/extrema.h>
 
-__global__ void sayHello()
-{
-    printf("Hello from GPU!\n");
+using namespace hcore_gpu;
+
+__global__ void sayHello(){
+  printf("Hello from GPU!\n");
 }
 
 __global__ void printAOR(double *R)
@@ -95,21 +96,19 @@ int HartreeFock_Rys_gpu::init()
 int HartreeFock_Rys_gpu::eval_OV(arma::mat &OV_mat)
 {
 
-    return eval_OVmat(m_molbasis, OV_mat);
+    return eval_OVmat(m_molbasis_gpu, m_molbasis, OV_mat);
 }
 
-int HartreeFock_Rys_gpu::eval_Hcore(arma::mat &H_mat)
-{
-    // m_molbasis.PrintAll();
+int HartreeFock_Rys_gpu::eval_Hcore(arma::mat &H_mat){
+  //m_molbasis.PrintAll();
 
-    // std::cout<< "\nNow print on GPU\n";
-
-    // printAOR<<<2,2>>>(m_molbasis_gpu.Atom_coords);
-    // printEffectivecharge<<<2,2>>>(m_molbasis_gpu.effective_charges);
-    // printmAOs<<<2,6>>>(m_molbasis_gpu.mAOs);
-    // evaluate the H core matrix (one-electron part)
-    return eval_Hcoremat(m_molbasis, H_mat);
-    return 0;
+  // std::cout<< "\nNow print on GPU\n";
+  // sayHello<<<2,2>>>();
+  //printAOR<<<2,2>>>(m_molbasis_gpu.Atom_coords);
+  //printEffectivecharge<<<2,2>>>(m_molbasis_gpu.effective_charges);
+  //printmAOs<<<2,6>>>(m_molbasis_gpu.mAOs);
+  // evaluate the H core matrix (one-electron part)
+  return eval_Hcoremat(m_molbasis_gpu, m_molbasis, H_mat);
 }
 
 int HartreeFock_Rys_gpu::eval_G(arma::mat &P_mat, arma::mat &G_mat)
