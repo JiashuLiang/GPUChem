@@ -124,8 +124,12 @@ int eval_OVmat(Molecule_basisGPU& system, Molecule_basis& system_cpu, arma::mat 
     // construct_S(S_mat, sorted_AOs, p_start_ind);
     construct_S<<<num_blocks,NUM_THREADS>>>(S_mat_gpu, mAO_array_gpu, nbsf, p_start_ind);
     // return S_mat to its original order.
-    S_mat = S_mat(undo_sorted_indices, undo_sorted_indices);
+    cudaMemcpy(S_mat_ptr, S_mat_gpu, nbsf * nbsf * sizeof(double), cudaMemcpyDeviceToHost);
+    arma::mat S_mat_temp(S_mat_ptr,nbsf,nbsf,true,false);
 
+    S_mat = S_mat_temp;
+    S_mat = S_mat(undo_sorted_indices, undo_sorted_indices);
+    // S_mat.print("Smat gpu");
     return 0;
 }
 
@@ -310,15 +314,15 @@ __device__ void construct_S_block(double* Smat,  AOGPU* mAOs, size_t mu_start_in
 
 }
 __global__ void construct_S(double* Smat,  AOGPU* mAOs, size_t nbsf, size_t p_start_ind){
-    size_t tid = TID;
+   size_t tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     size_t p_dim = nbsf - p_start_ind;
 
-    construct_S_block(Smat, mAOs, 0, 0, p_start_ind, p_start_ind, nbsf, tid); // ss
-    construct_S_block(Smat, mAOs, p_start_ind, 0, p_dim, p_start_ind, nbsf, tid); // ps
-    construct_S_block(Smat, mAOs, 0, p_start_ind, p_start_ind, p_dim, nbsf, tid); // sp
-    construct_S_block(Smat, mAOs, p_start_ind, p_start_ind, p_dim, p_dim, nbsf, tid); // pp
-
+    // construct_S_block(Smat, mAOs, 0, 0, p_start_ind, p_start_ind, nbsf, tid); // ss
+    // construct_S_block(Smat, mAOs, p_start_ind, 0, p_dim, p_start_ind, nbsf, tid); // ps
+    // construct_S_block(Smat, mAOs, 0, p_start_ind, p_start_ind, p_dim, nbsf, tid); // sp
+    // construct_S_block(Smat, mAOs, p_start_ind, p_start_ind, p_dim, p_dim, nbsf, tid); // pp
+    construct_S_block(Smat, mAOs, 0, 0, nbsf, nbsf, nbsf, tid); // pp
 }
 
 
