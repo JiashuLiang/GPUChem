@@ -188,24 +188,28 @@ int eval_Hcoremat(Molecule_basisGPU& system, Molecule_basis& system_cpu, arma::m
     cudaMemset(V_mat_gpu, 0.0, sizeof(double) * nbsf*nbsf);
 
     int num_blocks = (nbsf * nbsf /NUM_THREADS)+ 1;
+    construct_TV<<<num_blocks,NUM_THREADS>>>(T_mat_gpu, V_mat_gpu, mAO_array_gpu, nbsf, p_start_ind, system.Atom_coords, system.effective_charges, system.num_atom);
+
+
+
     //Construct Tmat
-    construct_T<<<num_blocks,NUM_THREADS>>>(T_mat_gpu,  mAO_array_gpu, nbsf, p_start_ind);
-    cudaDeviceSynchronize();
-    cudaError_t cudaStatus = cudaGetLastError();
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "construct_T launch failed: %s\n", cudaGetErrorString(cudaStatus));
-        // goto Error;
-    }
+    // construct_T<<<num_blocks,NUM_THREADS>>>(T_mat_gpu,  mAO_array_gpu, nbsf, p_start_ind);
+    // cudaDeviceSynchronize();
+    // cudaError_t cudaStatus = cudaGetLastError();
+    // if (cudaStatus != cudaSuccess) {
+    //     fprintf(stderr, "construct_T launch failed: %s\n", cudaGetErrorString(cudaStatus));
+    //     // goto Error;
+    // }
     cudaMemcpy(T_mat_ptr, T_mat_gpu,  nbsf * nbsf * sizeof(double), cudaMemcpyDeviceToHost);
 
     //Construct Vmat
-    construct_V<<<num_blocks,NUM_THREADS>>>(V_mat_gpu, mAO_array_gpu, nbsf, p_start_ind, system.Atom_coords, system.effective_charges, system.num_atom);
-    cudaDeviceSynchronize();
-    cudaStatus = cudaGetLastError();
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "construct_V launch failed: %s\n", cudaGetErrorString(cudaStatus));
-        // goto Error;
-    }
+    // construct_V<<<num_blocks,NUM_THREADS>>>(V_mat_gpu, mAO_array_gpu, nbsf, p_start_ind, system.Atom_coords, system.effective_charges, system.num_atom);
+    // cudaDeviceSynchronize();
+    // cudaStatus = cudaGetLastError();
+    // if (cudaStatus != cudaSuccess) {
+    //     fprintf(stderr, "construct_V launch failed: %s\n", cudaGetErrorString(cudaStatus));
+    //     // goto Error;
+    // }
     cudaMemcpy(V_mat_ptr, V_mat_gpu, nbsf * nbsf * sizeof(double), cudaMemcpyDeviceToHost);
     
     arma::mat T_mat(T_mat_ptr,nbsf,nbsf,true,false);
@@ -318,11 +322,11 @@ __global__ void construct_S(double* Smat,  AOGPU* mAOs, size_t nbsf, size_t p_st
 
     size_t p_dim = nbsf - p_start_ind;
 
-    // construct_S_block(Smat, mAOs, 0, 0, p_start_ind, p_start_ind, nbsf, tid); // ss
-    // construct_S_block(Smat, mAOs, p_start_ind, 0, p_dim, p_start_ind, nbsf, tid); // ps
-    // construct_S_block(Smat, mAOs, 0, p_start_ind, p_start_ind, p_dim, nbsf, tid); // sp
-    // construct_S_block(Smat, mAOs, p_start_ind, p_start_ind, p_dim, p_dim, nbsf, tid); // pp
-    construct_S_block(Smat, mAOs, 0, 0, nbsf, nbsf, nbsf, tid); // pp
+    construct_S_block(Smat, mAOs, 0, 0, p_start_ind, p_start_ind, nbsf, tid); // ss
+    construct_S_block(Smat, mAOs, p_start_ind, 0, p_dim, p_start_ind, nbsf, tid); // ps
+    construct_S_block(Smat, mAOs, 0, p_start_ind, p_start_ind, p_dim, nbsf, tid); // sp
+    construct_S_block(Smat, mAOs, p_start_ind, p_start_ind, p_dim, p_dim, nbsf, tid); // pp
+    // construct_S_block(Smat, mAOs, 0, 0, nbsf, nbsf, nbsf, tid); // pp
 }
 
 
@@ -372,19 +376,17 @@ __global__ void construct_TV(double* Tmat, double* Vmat, AOGPU* mAOs, size_t nbs
     size_t p_dim = nbsf - p_start_ind;
     if (tid==0) printf("construct_TV beginning, p_dim is  %d, nbsf is %d \n", int(p_dim), int(nbsf));
 
-    // construct_T_block(Tmat, mAOs, 0,           0,           p_start_ind,  p_start_ind, nbsf, tid); // ss
-    // construct_T_block(Tmat, mAOs, p_start_ind, 0,           p_dim,        p_start_ind, nbsf, tid); // ps
+    construct_T_block(Tmat, mAOs, 0,           0,           p_start_ind,  p_start_ind, nbsf, tid); // ss
+    construct_T_block(Tmat, mAOs, p_start_ind, 0,           p_dim,        p_start_ind, nbsf, tid); // ps
+    construct_T_block(Tmat, mAOs, 0          , p_start_ind, p_start_ind,  p_dim, nbsf, tid); // sp
+    construct_T_block(Tmat, mAOs, p_start_ind, p_start_ind, p_dim,        p_dim, nbsf, tid); // pp
+    // construct_T_block(Tmat, mAOs, 0,           0,           nbsf,  nbsf, nbsf, tid); // all
     
-    // construct_T_block(Tmat, mAOs, 0          , p_start_ind, p_start_ind,  p_dim, nbsf, tid); // sp
-
-    // construct_T_block(Tmat, mAOs, p_start_ind, p_start_ind, p_dim,        p_dim, nbsf, tid); // pp
-    construct_T_block(Tmat, mAOs, 0,           0,           nbsf,  nbsf, nbsf, tid); // ss
-    
-    // construct_V_block(Vmat, mAOs, 0, 0, p_start_ind, p_start_ind, nbsf, mol, tid); // ss
-    // construct_V_block(Vmat, mAOs, p_start_ind, 0, p_dim, p_start_ind, nbsf, mol, tid); // ps
-    // construct_V_block(Vmat, mAOs, 0, p_start_ind, p_start_ind, p_dim, nbsf, mol, tid); // sp
-    // construct_V_block(Vmat, mAOs, p_start_ind, p_start_ind, p_dim, p_dim, nbsf, mol, tid); // pp
-    construct_V_block(Vmat, mAOs, 0,           0,           nbsf,  nbsf, nbsf, Atom_coords, effective_charges, num_atom, tid); // ss
+    construct_V_block(Vmat, mAOs, 0, 0, p_start_ind, p_start_ind, nbsf, Atom_coords, effective_charges, num_atom, tid); // ss
+    construct_V_block(Vmat, mAOs, p_start_ind, 0, p_dim, p_start_ind, nbsf, Atom_coords, effective_charges, num_atom, tid); // ps
+    construct_V_block(Vmat, mAOs, 0, p_start_ind, p_start_ind, p_dim, nbsf, Atom_coords, effective_charges, num_atom, tid); // sp
+    construct_V_block(Vmat, mAOs, p_start_ind, p_start_ind, p_dim, p_dim, nbsf, Atom_coords, effective_charges, num_atom, tid); // pp
+    // construct_V_block(Vmat, mAOs, 0,           0,           nbsf,  nbsf, nbsf, Atom_coords, effective_charges, num_atom, tid); // ss
     // printf("construct_T is done, tid %d\n", int(tid));
 
 }
