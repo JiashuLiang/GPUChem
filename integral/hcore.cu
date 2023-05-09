@@ -31,6 +31,76 @@ __global__ void sayHello(){
     printf("Hello from GPU!\n");
 }
 
+__global__ void construct_S_whole_mat(double* Smat,  AOGPU* mAOs, size_t nbsf);
+
+
+int eval_OVmat_without_sort_inside(Molecule_basisGPU& system, arma::mat &S_mat){
+    const size_t nbsf = system.num_ao;
+    S_mat.set_size(nbsf,nbsf);
+    S_mat.zeros();
+
+    // Copy Smatrices
+    double *S_mat_gpu;
+
+    cudaMalloc((void**)&S_mat_gpu, nbsf * nbsf* sizeof(double));
+    cudaMemset(S_mat_gpu, 0.0, sizeof(double) * nbsf*nbsf);
+
+    // MARKER
+    // Perform construction of S, sorted into blocks of ss, sp, ps,pp
+    int num_blocks = (nbsf * nbsf /NUM_THREADS)+ 1;
+    construct_S_whole_mat<<<num_blocks,NUM_THREADS>>>(S_mat_gpu, system.mAOs, nbsf);
+    // return S_mat to its original order.
+    cudaMemcpy(S_mat.memptr(), S_mat_gpu, nbsf * nbsf * sizeof(double), cudaMemcpyDeviceToHost);
+
+    return 0;
+}
+
+
+int eval_Hcoremat_without_sort_inside(Molecule_basisGPU& system, arma::mat &H_mat){
+    const size_t nbsf = system.num_ao;
+    H_mat.set_size(nbsf,nbsf);
+    H_mat.zeros();
+
+    // create V matrix
+    double *V_mat_ptr = new double[nbsf*nbsf]; 
+    double *T_mat_gpu, *V_mat_gpu;
+
+    cudaMalloc((void**)&T_mat_gpu, nbsf * nbsf* sizeof(double));
+    cudaMemset(T_mat_gpu, 0.0, sizeof(double) * nbsf*nbsf);
+    
+    cudaMalloc((void**)&V_mat_gpu, nbsf * nbsf* sizeof(double));
+    cudaMemset(V_mat_gpu, 0.0, sizeof(double) * nbsf*nbsf);
+
+    int num_blocks = (nbsf * nbsf /NUM_THREADS)+ 1;
+    //Construct Tmat
+    construct_T<<<num_blocks,NUM_THREADS>>>(T_mat_gpu, system.mAOs, nbsf);
+    cudaDeviceSynchronize();
+    cudaError_t cudaStatus = cudaGetLastError();
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "construct_T launch failed: %s\n", cudaGetErrorString(cudaStatus));
+        // goto Error;
+    }
+    // use H_mat to store T_mat 
+    cudaMemcpy(H_mat.memptr(), T_mat_gpu,  nbsf * nbsf * sizeof(double), cudaMemcpyDeviceToHost);
+
+    //Construct Vmat
+    construct_V<<<num_blocks,NUM_THREADS>>>(V_mat_gpu, system.mAOs, nbsf, system.Atom_coords, system.effective_charges, system.num_atom);
+    cudaDeviceSynchronize();
+    cudaStatus = cudaGetLastError();
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "construct_V launch failed: %s\n", cudaGetErrorString(cudaStatus));
+        // goto Error;
+    }
+    cudaMemcpy(V_mat_ptr, V_mat_gpu, nbsf * nbsf * sizeof(double), cudaMemcpyDeviceToHost);
+    
+    arma::mat V_mat(V_mat_ptr,nbsf,nbsf,true,false);
+    H_mat += V_mat;
+    
+    // H_mat.print("H_mat");
+    return 0;
+}
+
+
 
 
 void copy_AOs_to_gpu(std::vector<AO>& cpu_AOs, AOGPU* ao_gpu_array) {
@@ -315,8 +385,16 @@ __device__ void construct_S_block(double* Smat,  AOGPU* mAOs, size_t mu_start_in
     
     Smat[mu_nu_ind] = eval_Smunu(mAOs[mu + mu_start_ind], mAOs[nu + nu_start_ind]);
 
-
 }
+
+__global__ void construct_S_whole_mat(double* Smat,  AOGPU* mAOs, size_t nbsf){
+   size_t tid = threadIdx.x + blockIdx.x * blockDim.x;
+    construct_S_block(Smat, mAOs, 0, 0, nbsf, nbsf, nbsf, tid); 
+}
+
+
+
+
 __global__ void construct_S(double* Smat,  AOGPU* mAOs, size_t nbsf, size_t p_start_ind){
    size_t tid = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -392,18 +470,17 @@ __global__ void construct_TV(double* Tmat, double* Vmat, AOGPU* mAOs, size_t nbs
 }
 
 
-__global__ void construct_T(double* Tmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind){
+__global__ void construct_T(double* Tmat, AOGPU* mAOs, size_t nbsf){
     size_t tid = threadIdx.x + blockIdx.x * blockDim.x;
-    // size_t p_dim = nbsf - p_start_ind;
-    construct_T_block(Tmat, mAOs, 0,           0,           nbsf,  nbsf, nbsf, tid); // ss
+    construct_T_block(Tmat, mAOs, 0,  0, nbsf,  nbsf, nbsf, tid); // ss
 
 }
 
 
-__global__ void construct_V(double* Vmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind, double* Atom_coords, const int* effective_charges, const int num_atom){
+__global__ void construct_V(double* Vmat, AOGPU* mAOs, size_t nbsf, double* Atom_coords, const int* effective_charges, const int num_atom){
     size_t tid = threadIdx.x + blockIdx.x * blockDim.x;
     // size_t p_dim = nbsf - p_start_ind;
-    construct_V_block(Vmat, mAOs, 0,           0,           nbsf,  nbsf, nbsf, Atom_coords, effective_charges, num_atom, tid); // ss
+    construct_V_block(Vmat, mAOs, 0, 0, nbsf,  nbsf, nbsf, Atom_coords, effective_charges, num_atom, tid); // ss
 }
 
 

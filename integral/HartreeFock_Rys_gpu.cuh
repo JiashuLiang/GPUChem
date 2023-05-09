@@ -14,9 +14,7 @@ class HamiltonianGPU: public Hamiltonian{
         Molecule_basisGPU m_molbasis_gpu;
 
         HamiltonianGPU() = default;
-        HamiltonianGPU(Molecule_basis &m_molbasis_i, double shreshold_i = 1e-7): Hamiltonian(m_molbasis_i, shreshold_i){
-            copy_molecule_basis_to_gpu(m_molbasis, m_molbasis_gpu);
-        };
+        HamiltonianGPU(Molecule_basis &m_molbasis_i, double shreshold_i = 1e-7): Hamiltonian(m_molbasis_i, shreshold_i){};
         ~HamiltonianGPU() { release_molecule_basis_gpu(m_molbasis_gpu); }
 };
 
@@ -26,9 +24,11 @@ class HartreeFock_Rys_gpu: public HamiltonianGPU{
         double *rys_root;
         int Schwarz_mat_dim0, Schwarz_mat_dim1; // the dimension of Schwarz_mat , dim0 is outer dimension, dim1 is inner dimension (fast dimension)
         int rys_root_dim0, rys_root_dim1; // the dimension of rys_root , dim0 is outer dimension, dim1 is inner dimension (fast dimension)
+        bool sort_AO;
 
         HartreeFock_Rys_gpu() = default;
-        HartreeFock_Rys_gpu(Molecule_basis &m_molbasis_i, double shreshold_i = 1e-7): HamiltonianGPU(m_molbasis_i, shreshold_i){};
+        HartreeFock_Rys_gpu(Molecule_basis &m_molbasis_i, double shreshold_i = 1e-7, bool sort_AO_i = false): 
+                    HamiltonianGPU(m_molbasis_i, shreshold_i), sort_AO(sort_AO_i){};
         ~HartreeFock_Rys_gpu();
         virtual int init();
         // evaluate the Overlap matrix

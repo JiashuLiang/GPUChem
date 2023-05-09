@@ -29,7 +29,7 @@ int run_Halmitonian(std::string test_case, std::string hamiltonian_name){
     if(hamiltonian_name == "hf")
       myHamiltonian = new HartreeFock_Rys(MyMolBasis, 1e-14, true);
     else if(hamiltonian_name == "hf_gpu")
-      myHamiltonian = new HartreeFock_Rys_gpu(MyMolBasis, 1e-14);
+      myHamiltonian = new HartreeFock_Rys_gpu(MyMolBasis, 1e-14, true);
 
       
     int ok = myHamiltonian->init();
@@ -40,6 +40,9 @@ int run_Halmitonian(std::string test_case, std::string hamiltonian_name){
     arma::mat Pa(nbasis, nbasis);
     Pa.load(Pmat_name);
     
+    // arma::mat S_mat(nbasis,nbasis);
+    // myHamiltonian->eval_OV(S_mat);
+    // S_mat.print("Overlap matrix");
     arma::mat H_core(nbasis,nbasis), Ga(nbasis,nbasis);
     myHamiltonian->eval_Hcore(H_core);
     myHamiltonian->eval_G(Pa, Ga);

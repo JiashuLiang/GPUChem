@@ -28,9 +28,9 @@ RSCF::RSCF(Molecule_basis &m_molbasis_i, int max_it, double tolerence,
   
   //Initialize the Hamiltonian
   if (hamiltonian_name == "hf_gpu")
-    m_hamiltonian = new HartreeFock_Rys_gpu(m_molbasis, 1e-3 * tolerence);
+    m_hamiltonian = new HartreeFock_Rys_gpu(m_molbasis, 1e-3 * tolerence, true);
   else
-    m_hamiltonian = new HartreeFock_Rys(m_molbasis, 1e-3 * tolerence);
+    m_hamiltonian = new HartreeFock_Rys(m_molbasis, 1e-3 * tolerence, true);
 
 
   //Initialize the SCF algorithm

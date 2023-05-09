@@ -28,5 +28,6 @@ void copy_molecule_basis_to_gpu(const Molecule_basis& mol_basis, Molecule_basisG
 void release_aogpu(AOGPU& ao_gpu);
 void release_molecule_basis_gpu(Molecule_basisGPU& mol_basis_gpu);
 
+void copy_sorted_molecule_basis_to_gpu(const Molecule_basis& mol_basis, Molecule_basisGPU& mol_basis_gpu);
 
 #endif // MOLECULE_BASIS_CUH

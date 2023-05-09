@@ -108,3 +108,83 @@ void release_molecule_basis_gpu(Molecule_basisGPU& mol_basis_gpu) {
         mol_basis_gpu.effective_charges = nullptr;
     }
 }
+
+
+void copy_sorted_molecule_basis_to_gpu(const Molecule_basis& mol_basis, Molecule_basisGPU& mol_basis_gpu){
+    int num_ao = mol_basis.mAOs_sorted.size();
+    int num_atoms = mol_basis.m_mol.mAtoms.size();
+
+    // Allocate memory on the GPU for the mAOs_sorted array
+    cudaMalloc((void**)&mol_basis_gpu.mAOs, num_ao * sizeof(AOGPU));
+
+    // Allocate and copy AO data to the GPU
+    for (size_t i = 0; i < num_ao; i++) {
+        AOGPU ao_gpu;
+
+        // Set length of AOGPU
+        ao_gpu.len = mol_basis.mAOs_sorted[i].len;
+        
+        // Allocate memory on the GPU
+        cudaMalloc((void**)&ao_gpu.R0, 3 * sizeof(double));
+        cudaMalloc((void**)&ao_gpu.lmn, 3 * sizeof(unsigned int));
+        cudaMalloc((void**)&ao_gpu.alpha, ao_gpu.len * sizeof(double));
+        cudaMalloc((void**)&ao_gpu.d_coe, ao_gpu.len * sizeof(double));
+
+        // Copy the data from the CPU to the GPU
+        cudaMemcpy(ao_gpu.R0, mol_basis.mAOs_sorted[i].R0.memptr(), 3 * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(ao_gpu.lmn, mol_basis.mAOs_sorted[i].lmn.memptr(), 3 * sizeof(unsigned int), cudaMemcpyHostToDevice);
+        cudaMemcpy(ao_gpu.alpha, mol_basis.mAOs_sorted[i].alpha.memptr(), ao_gpu.len * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(ao_gpu.d_coe, mol_basis.mAOs_sorted[i].d_coe.memptr(), ao_gpu.len * sizeof(double), cudaMemcpyHostToDevice);
+
+        // Copy the AOGPU object to the mAOs array on the GPU
+        cudaMemcpy(mol_basis_gpu.mAOs + i, &ao_gpu, sizeof(AOGPU), cudaMemcpyHostToDevice);
+    }
+    
+    
+    
+    // Create temporary arrays to hold the atom coordinates and effective charges
+    arma::mat atom_coords(3, num_atoms);
+    std::vector<int> effective_charges(num_atoms);
+    // Fill the temporary arrays with data from the Molecule_basis object
+    for (size_t i = 0; i < num_atoms; i++) {
+        const Atom& atom = mol_basis.m_mol.mAtoms[i];
+        atom_coords.col(i) = atom.m_coord;
+        effective_charges[i] = atom.m_effective_charge;
+    }
+    
+    // Allocate memory on the device for Atom coordinates and effective charges
+    cudaMalloc((void**)&(mol_basis_gpu.Atom_coords), num_atoms * 3 * sizeof(double));
+    cudaMalloc((void**)&(mol_basis_gpu.effective_charges), num_atoms * sizeof(int));
+    
+    // Copy the Atom_coords and effective_charges arrays from the host to the GPU
+    cudaMemcpy(mol_basis_gpu.Atom_coords, atom_coords.memptr(), 3 * num_atoms * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(mol_basis_gpu.effective_charges, effective_charges.data(), num_atoms * sizeof(int), cudaMemcpyHostToDevice);
+
+    mol_basis_gpu.num_atom = num_atoms;
+    mol_basis_gpu.num_ao = num_ao;
+    mol_basis_gpu.m_charge = mol_basis.m_mol.m_charge;
+    mol_basis_gpu.num_alpha_ele = mol_basis.num_alpha_ele;
+    mol_basis_gpu.num_beta_ele = mol_basis.num_beta_ele;
+}
+
+
+
+
+__global__ void printAOR(double *R)
+{
+    int id = threadIdx.x + blockIdx.x * blockDim.x;
+    printf("%d R( %1.2f, %1.2f, %1.2f)\n", id, R[id * 3 + 0], R[id * 3 + 1], R[id * 3 + 2]);
+}
+__global__ void printEffectivecharge(int *R)
+{
+    int id = threadIdx.x + blockIdx.x * blockDim.x;
+    printf("%d Effectivecharge %d\n", id, R[id]);
+}
+
+__global__ void printmAOs(AOGPU *mAOs)
+{
+    int id = threadIdx.x + blockIdx.x * blockDim.x;
+    printf("%d info, R( %1.2f, %1.2f, %1.2f), with angular momentum: %x %x %x, alpha:( %1.2f, %1.2f, %1.2f), dcoef( %1.2f, %1.2f, %1.2f)\n", id,
+           mAOs[id].R0[0], mAOs[id].R0[1], mAOs[id].R0[2], mAOs[id].lmn[0], mAOs[id].lmn[1], mAOs[id].lmn[2],
+           mAOs[id].alpha[0], mAOs[id].alpha[1], mAOs[id].alpha[2], mAOs[id].d_coe[0], mAOs[id].d_coe[1], mAOs[id].d_coe[2]);
+}

@@ -66,20 +66,15 @@ private:
 
 // Primary functions
 int eval_Hcoremat(Molecule_basisGPU& system, Molecule_basis& system_cpu, arma::mat &H_mat);
-// int eval_Hcoremat(Molecule_basis& system, arma::mat &H_mat);
+int eval_Hcoremat_without_sort_inside(Molecule_basisGPU& system, arma::mat &H_mat);
 
 int eval_OVmat(Molecule_basisGPU& system, Molecule_basis& system_cpu, arma::mat &S_mat);
+int eval_OVmat_without_sort_inside(Molecule_basisGPU& system, arma::mat &S_mat);
+
 
 // size_t sort_AOs(std::vector<AO> &unsorted_AOs, std::vector<AO> &sorted_AOs, arma::uvec &sorted_indices);
 size_t sort_AOs(AOGPU* unsorted_AOs, const int nbsf, std::vector<AOGPU> &sorted_AOs, arma::uvec &sorted_indices);
 size_t sort_AOs(std::vector<AO> &unsorted_AOs, std::vector<AO> &sorted_AOs, arma::uvec &sorted_indices);
-
-// void construct_S(arma::mat &Smat, std::vector<AO> &mAOs, size_t p_start_ind);
-// void construct_V(arma::mat &Vmat, std::vector<AO> &mAOs, size_t p_start_ind, const Molecule &mol);
-// void construct_T(arma::mat &Tmat, std::vector<AO> &mAOs, size_t p_start_ind);
-// void construct_S_unsorted(arma::mat &Smat, std::vector<AO> &mAOs);
-// void construct_V_unsorted(arma::mat &Vmat, std::vector<AO> &mAOs, const Molecule &mol);
-// void construct_T_unsorted(arma::mat &Tmat, std::vector<AO> &mAOs);
 
 
 __device__ double eval_Smunu(AOGPU &mu, AOGPU &nu);
@@ -120,8 +115,8 @@ __device__ void construct_T_block(double* Tmat,  AOGPU* mAOs, size_t mu_start_in
 __device__ void construct_V_block(double* Vmat,  AOGPU* mAOs, size_t mu_start_ind, size_t nu_start_ind, size_t num_mu, size_t num_nu, size_t nbsf, double* Atom_coords, const int* effective_charges, const int num_atom, size_t tid);
 __global__ void construct_TV(double* Tmat, double* Vmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind, double* Atom_coords, const int* effective_charges, const int num_atom);
 
-__global__ void construct_T(double* Tmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind);
-__global__ void construct_V(double* Vmat, AOGPU* mAOs, size_t nbsf, size_t p_start_ind, double* Atom_coords, const int* effective_charges, const int num_atom);
+__global__ void construct_T(double* Tmat, AOGPU* mAOs, size_t nbsf);
+__global__ void construct_V(double* Vmat, AOGPU* mAOs, size_t nbsf, double* Atom_coords, const int* effective_charges, const int num_atom);
 
 #endif // HCORE_CUH
 }
