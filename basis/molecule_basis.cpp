@@ -112,3 +112,9 @@ void Molecule_basis::PrintAll(){
     std::cout << "Number of beta electrons: " << num_beta_ele << std::endl;
     PrintBasisInfo();
 }
+
+int Molecule_basis::Sort_AOs(){
+    int ok = sort_AOs(mAOs, mAOs_sorted, mAOs_sorted_index, sorted_offs);
+    mAOs_sorted_index_inv = arma::sort_index(mAOs_sorted_index);
+    return ok;
+}

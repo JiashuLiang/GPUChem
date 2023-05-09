@@ -32,9 +32,11 @@ class HartreeFock_Rys: public Hamiltonian{
     public:
         arma::mat Schwarz_mat;
         arma::mat rys_root;
+        bool sort_AO;
 
         HartreeFock_Rys() = default;
-        HartreeFock_Rys(Molecule_basis &m_molbasis_i, double shreshold_i = 1e-7): Hamiltonian(m_molbasis_i, shreshold_i){};
+        HartreeFock_Rys(Molecule_basis &m_molbasis_i, double shreshold_i = 1e-7, bool sort_AO_i = false): 
+                Hamiltonian(m_molbasis_i, shreshold_i), sort_AO(sort_AO_i){};
         virtual int init();
         // evaluate the Overlap matrix
         virtual int eval_OV(arma::mat &OV_mat);

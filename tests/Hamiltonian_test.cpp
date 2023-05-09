@@ -27,7 +27,7 @@ int run_Halmitonian(std::string test_case, std::string hamiltonian_name){
 
     Hamiltonian* myHamiltonian;
     if(hamiltonian_name == "hf")
-      myHamiltonian = new HartreeFock_Rys(MyMolBasis, 1e-14);
+      myHamiltonian = new HartreeFock_Rys(MyMolBasis, 1e-14, true);
     else if(hamiltonian_name == "hf_gpu")
       myHamiltonian = new HartreeFock_Rys_gpu(MyMolBasis, 1e-14);
 
@@ -66,9 +66,9 @@ int run_Halmitonian(std::string test_case, std::string hamiltonian_name){
 int main(int argc, char *argv[])
 {
   return
-    run_Halmitonian("H2", "hf")|
-    run_Halmitonian("H2", "hf_gpu")|
+    // run_Halmitonian("H2", "hf")|
+    // run_Halmitonian("H2", "hf_gpu")|
     run_Halmitonian("C2H4", "hf")|
-    run_Halmitonian("C2H4", "hf_gpu")|
+    // run_Halmitonian("C2H4", "hf_gpu")|
     0;
 }

@@ -19,6 +19,20 @@ class AO
         void printinfo();
 };
 
+//Sort the AOs according to lmn, s, px, py, pz, dxx, dxy, dxz, dyy, dyz, dzz, fxxx, fxxy, fxxz, fxyy, fxyz, fxzz, fyyy, fyyz, fyzz, fzzz...
+int sort_AOs(std::vector<AO> &unsorted_AOs, std::vector<AO> &sorted_AOs, arma::uvec &sorted_indices, arma::uvec & sorted_offs);
+
+
+// // a class to store the information of a pair of AO
+// class AO_pair
+// {
+//     public:
+//         const AO & ao1;
+//         const AO & ao2;
+//         //constructor
+//         AO_pair(const AO & ao1_input, const AO & ao2_input): ao1(ao1_input), ao2(ao2_input){}
+// };
+
 
 
 #endif // AO_H

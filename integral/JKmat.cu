@@ -73,22 +73,6 @@ __global__ void eval_Jmat_RSCF_kernel(AOGPU* d_mAOs, double* d_rys_root, double*
     int mu = blockIdx.x;
     int nu = blockIdx.y;
 
-	//print rys_root and Schwarz_mat to debug
-	// printf("rys_root = \n");
-	// for (int i = 0; i < 5; i++){
-	// 	for (int j = 0; j < 6; j++){
-	// 		printf("%f ", d_rys_root[j * rys_root_dim1 + i]);
-	// 	}
-	// 	printf("\n");
-	// }
-	// printf("Schwarz_mat = \n");
-	// for (int i = 0; i < nbasis; i++){
-	// 	for (int j = 0; j < nbasis; j++){
-	// 		printf("%f ", d_Schwarz_mat[i  + j* nbasis]);
-	// 	}
-	// 	printf("\n");
-	// }
-
     if (mu >= nbasis || nu >= nbasis || mu > nu) {
         return;
     }

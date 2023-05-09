@@ -6,10 +6,19 @@
 #include <Setup/molecule.h>
 #include <armadillo>
 
+
+// Molecule basis class
 class Molecule_basis{
     public:
         std::vector<AO> mAOs;
         Molecule m_mol;
+
+        // Sorted AOs
+        std::vector<AO> mAOs_sorted;
+        arma::uvec mAOs_sorted_index;
+        arma::uvec mAOs_sorted_index_inv;
+        arma::uvec sorted_offs;
+        
         int num_alpha_ele;
         int num_beta_ele;
 
@@ -21,6 +30,10 @@ class Molecule_basis{
         int Construct_basis(const std::string &basis_name);
         // Construct Molecule basis according to BasisSet input
         int Construct_basis(const BasisSet &basis_set);
+
+        // Sort AOs and initialize mAOs_sorted, mAOs_sorted_index, mAOs_sorted_index_inv, sorted_offs
+        int Sort_AOs();
+
 
         int addBasisShell(const BasisShell & added_shell, const arma::vec &atom_position);
         void addAO(AO aAO){
