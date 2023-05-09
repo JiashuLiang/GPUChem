@@ -42,7 +42,8 @@ int HartreeFock_Rys::eval_Hcore(arma::mat &H_mat){
 int HartreeFock_Rys::eval_G(arma::mat &P_mat, arma::mat &G_mat){
   // evaluate the G matrix (two-electron part)
   if (sort_AO){
-    int ok = eval_Gmat_RSCF(m_molbasis.mAOs_sorted, rys_root, Schwarz_mat, shreshold, P_mat, G_mat);
+    arma::mat P_mat_temp = P_mat(m_molbasis.mAOs_sorted_index, m_molbasis.mAOs_sorted_index);
+    int ok = eval_Gmat_RSCF(m_molbasis.mAOs_sorted, rys_root, Schwarz_mat, shreshold, P_mat_temp, G_mat);
     // sort back
     G_mat = G_mat(m_molbasis.mAOs_sorted_index_inv, m_molbasis.mAOs_sorted_index_inv);
     return ok;

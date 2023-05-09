@@ -69,6 +69,6 @@ int main(int argc, char *argv[])
     // run_Halmitonian("H2", "hf")|
     // run_Halmitonian("H2", "hf_gpu")|
     run_Halmitonian("C2H4", "hf")|
-    // run_Halmitonian("C2H4", "hf_gpu")|
+    run_Halmitonian("C2H4", "hf_gpu")|
     0;
 }

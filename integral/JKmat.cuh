@@ -13,4 +13,6 @@ int eval_Kmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz_
         double *Pa_mat, double *K_mat, int rys_root_dim1);
 __global__ void eval_Schwarzmat_GPU(AOGPU * mAOs, double *rys_root, double *Schwarz_mat, int nbasis, int rys_root_dim1);
 
+int eval_JKmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz_mat, double schwarz_tol, double schwarz_max, 
+		double *Pa_mat, double *J_mat, double *K_mat, int rys_root_dim1);
 #endif // JKMAT_H

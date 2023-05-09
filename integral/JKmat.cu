@@ -8,6 +8,8 @@
 #define rys_root(flr_index, x) rys_root[(flr_index) + x * rys_root_dim1]
 #define Schwarz_mat(flr_index, x) rys_root[(flr_index) + x * rys_root_dim1]
 #define threadsPerBlock_forNbasisSquare 64
+#define OneDemension_threadsPerBlock 8
+
 
 // calculates (i j | k l), each of those is a CGTO basis function
 // sorry using i j k l here instead of mu nu si la
@@ -57,8 +59,10 @@ int eval_Gmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz_
 	cudaMemset(K_mat, 0, nbasis * nbasis * sizeof(double));
 
 	// Calculate J_mat and K_mat on GPU using eval_Jmat_RSCF and eval_Kmat_RSCF
-	eval_Jmat_RSCF(system, rys_root, Schwarz_mat, schwarz_tol, schwarz_max, Pa_mat, J_mat, rys_root_dim1);
-	eval_Kmat_RSCF(system, rys_root, Schwarz_mat, schwarz_tol, schwarz_max, Pa_mat, K_mat, rys_root_dim1);
+	// eval_Jmat_RSCF(system, rys_root, Schwarz_mat, schwarz_tol, schwarz_max, Pa_mat, J_mat, rys_root_dim1);
+	// eval_Kmat_RSCF(system, rys_root, Schwarz_mat, schwarz_tol, schwarz_max, Pa_mat, K_mat, rys_root_dim1);
+	eval_JKmat_RSCF(system, rys_root, Schwarz_mat, schwarz_tol, schwarz_max, Pa_mat, J_mat, K_mat, rys_root_dim1);
+
 
 	// Calculate G_mat = 2 * J_mat - K_mat on GPU using eval_Gmat_RSCF_kernel
 	int blockSize = 256;
@@ -66,6 +70,122 @@ int eval_Gmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz_
 	eval_Gmat_RSCF_kernel<<<numBlocks, blockSize>>>(J_mat, K_mat, G_mat, nbasis);
 
 	return 0;
+}
+
+
+__global__ void eval_JKmat_RSCF_kernel(AOGPU* d_mAOs, double* d_rys_root, double* d_Schwarz_mat, 
+		double schwarz_tol_sq, double schwarz_max, int nbasis, double* d_Pa_mat, double* d_J_mat, double *d_K_mat, int rys_root_dim1) {
+    int mu = blockIdx.x;
+    int nu = blockIdx.y;
+
+    if (mu >= nbasis || nu >= nbasis || mu > nu) {
+        return;
+    }
+
+    if (d_Schwarz_mat[nu * nbasis + mu] * schwarz_max < schwarz_tol_sq) {
+        return;
+    }
+
+
+	int numblocks_1d = (nbasis + OneDemension_threadsPerBlock - 1) / OneDemension_threadsPerBlock;
+    int si_block_idx = blockIdx.z / numblocks_1d;
+    int la_block_idx = blockIdx.z % numblocks_1d;
+
+	if (si_block_idx > la_block_idx) {
+		return;
+	}
+
+
+    int si = threadIdx.x + blockDim.x * si_block_idx;
+    int la = threadIdx.y + blockDim.y * la_block_idx;
+
+    // Use shared memory to store partial sums
+    __shared__ double partial_sums[threadsPerBlock_forNbasisSquare];
+
+    // Initialize shared memory
+	int tid = threadIdx.x + blockDim.x * threadIdx.y;
+    partial_sums[tid] = 0;
+
+    if (si < nbasis && la < nbasis && si <= la) {
+        AOGPU AO_mu = d_mAOs[mu];
+        AOGPU AO_nu = d_mAOs[nu];
+        AOGPU AO_si = d_mAOs[si];
+        AOGPU AO_la = d_mAOs[la];
+        
+		if (d_Schwarz_mat[nu * nbasis + mu] * d_Schwarz_mat[la * nbasis + si] > schwarz_tol_sq) {
+            double value = eval_2eint(d_rys_root, AO_mu, AO_nu, AO_si, AO_la, rys_root_dim1);
+			// print index, R0, lmn of all AOs and eval_2eint value to debug
+			// printf("mu = %d, nu = %d, si = %d, la = %d, value = %f\n", mu, nu, si, la, value);
+			// printf("mu index = %d, R0 = (%f, %f, %f), lmn = (%d, %d, %d)\n", mu, AO_mu.R0[0], AO_mu.R0[1], AO_mu.R0[2], AO_mu.lmn[0], AO_mu.lmn[1], AO_mu.lmn[2]);
+			// printf("nu index = %d, R0 = (%f, %f, %f), lmn = (%d, %d, %d)\n", nu, AO_nu.R0[0], AO_nu.R0[1], AO_nu.R0[2], AO_nu.lmn[0], AO_nu.lmn[1], AO_nu.lmn[2]);
+			// printf("si index = %d, R0 = (%f, %f, %f), lmn = (%d, %d, %d)\n", si, AO_si.R0[0], AO_si.R0[1], AO_si.R0[2], AO_si.lmn[0], AO_si.lmn[1], AO_si.lmn[2]);
+			// printf("la index = %d, R0 = (%f, %f, %f), lmn = (%d, %d, %d)\n", la, AO_la.R0[0], AO_la.R0[1], AO_la.R0[2], AO_la.lmn[0], AO_la.lmn[1], AO_la.lmn[2]);
+
+			// for K matrix
+            atomicAdd(&d_K_mat[la * nbasis + mu], value * d_Pa_mat[nu * nbasis + si]);
+			if(mu != nu)
+				atomicAdd(&d_K_mat[la * nbasis + nu], value * d_Pa_mat[mu * nbasis + si]);
+
+			if (si == la){
+				partial_sums[tid] = value * d_Pa_mat[la * nbasis + si]; // for J matrix
+				// no need to calculate K matrix
+			}
+			else{
+				partial_sums[tid] = 2 * value * d_Pa_mat[la * nbasis + si]; // for J matrix
+				// for K matrix
+				atomicAdd(&d_K_mat[si * nbasis + mu], value * d_Pa_mat[nu * nbasis + la]);
+				if(mu != nu)
+					atomicAdd(&d_K_mat[si * nbasis + nu], value * d_Pa_mat[mu * nbasis + la]);
+			}
+			
+        }
+    }
+
+    __syncthreads();
+
+    // Perform parallel reduction
+    for (int stride = threadsPerBlock_forNbasisSquare / 2; stride > 0; stride /= 2) {
+        if (tid < stride) {
+            partial_sums[tid] += partial_sums[tid + stride];
+        }
+        __syncthreads();
+    }
+
+    // The first thread in the block updates the J_mat with the accumulated value
+    if (tid == 0) {
+        atomicAdd(&d_J_mat[nu * nbasis + mu], partial_sums[0]);
+        if(mu != nu)
+            atomicAdd(&d_J_mat[mu * nbasis + nu], partial_sums[0]);
+		// print J_mat[nu * nbasis + mu] and J_mat[mu * nbasis + nu] to debug
+		// printf("J_mat[%d, %d] = %f, J_mat[%d, %d] = %f\n", nu, mu, d_J_mat[nu * nbasis + mu], mu, nu, d_J_mat[mu * nbasis + nu]);
+    }
+}
+
+
+
+int eval_JKmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz_mat, double schwarz_tol, double schwarz_max, 
+		double *Pa_mat, double *J_mat, double *K_mat, int rys_root_dim1){
+
+	int nbasis = system.num_ao;
+    double schwarz_tol_sq = schwarz_tol * schwarz_tol;
+
+    // Define the grid and block dimensions
+	dim3 blockDim(OneDemension_threadsPerBlock, OneDemension_threadsPerBlock); // OneDemension_threadsPerBlock^2 threads per block
+	int numblocks_1d = (nbasis + OneDemension_threadsPerBlock - 1) / OneDemension_threadsPerBlock;
+	dim3 gridDim(nbasis, nbasis, numblocks_1d * numblocks_1d);
+    
+    // Call the kernel
+    eval_JKmat_RSCF_kernel<<<gridDim, blockDim>>>(system.mAOs, rys_root, Schwarz_mat, schwarz_tol_sq, schwarz_max, 
+			nbasis, Pa_mat, J_mat, K_mat, rys_root_dim1);
+
+    // Wait for the kernel to finish execution and check for errors
+    cudaDeviceSynchronize();
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("Error in eval_JKmat_RSCF_kernel: %s\n", cudaGetErrorString(err));
+        return 1;
+    }
+    return 0;
 }
 
 __global__ void eval_Jmat_RSCF_kernel(AOGPU* d_mAOs, double* d_rys_root, double* d_Schwarz_mat, 
@@ -99,14 +219,6 @@ __global__ void eval_Jmat_RSCF_kernel(AOGPU* d_mAOs, double* d_rys_root, double*
         
 		if (d_Schwarz_mat[nu * nbasis + mu] * d_Schwarz_mat[la * nbasis + si] > schwarz_tol_sq) {
             double value = eval_2eint(d_rys_root, AO_mu, AO_nu, AO_si, AO_la, rys_root_dim1) * d_Pa_mat[la * nbasis + si];
-			// print index, R0, lmn of all AOs and eval_2eint value to debug
-			// printf("mu = %d, nu = %d, si = %d, la = %d, value = %f\n", mu, nu, si, la, value);
-			// printf("mu index = %d, R0 = (%f, %f, %f), lmn = (%d, %d, %d)\n", mu, AO_mu.R0[0], AO_mu.R0[1], AO_mu.R0[2], AO_mu.lmn[0], AO_mu.lmn[1], AO_mu.lmn[2]);
-			// printf("nu index = %d, R0 = (%f, %f, %f), lmn = (%d, %d, %d)\n", nu, AO_nu.R0[0], AO_nu.R0[1], AO_nu.R0[2], AO_nu.lmn[0], AO_nu.lmn[1], AO_nu.lmn[2]);
-			// printf("si index = %d, R0 = (%f, %f, %f), lmn = (%d, %d, %d)\n", si, AO_si.R0[0], AO_si.R0[1], AO_si.R0[2], AO_si.lmn[0], AO_si.lmn[1], AO_si.lmn[2]);
-			// printf("la index = %d, R0 = (%f, %f, %f), lmn = (%d, %d, %d)\n", la, AO_la.R0[0], AO_la.R0[1], AO_la.R0[2], AO_la.lmn[0], AO_la.lmn[1], AO_la.lmn[2]);
-			
-			
             partial_sums[threadIdx.x] = value;
         }
     }
@@ -126,8 +238,6 @@ __global__ void eval_Jmat_RSCF_kernel(AOGPU* d_mAOs, double* d_rys_root, double*
         atomicAdd(&d_J_mat[nu * nbasis + mu], partial_sums[0]);
         if(mu != nu)
             atomicAdd(&d_J_mat[mu * nbasis + nu], partial_sums[0]);
-		// print J_mat[nu * nbasis + mu] and J_mat[mu * nbasis + nu] to debug
-		// printf("J_mat[%d, %d] = %f, J_mat[%d, %d] = %f\n", nu, mu, d_J_mat[nu * nbasis + mu], mu, nu, d_J_mat[mu * nbasis + nu]);
     }
 }
 
