@@ -9,6 +9,7 @@
 
 using namespace std;
 
+// Check if the basis set is read correctly from the file
 int Basis_reading(std::string basis_name){
     BasisSet MyBasis(basis_name);
     // MyBasis.PrintBasis();
@@ -34,6 +35,7 @@ int Basis_reading(std::string basis_name){
     return 0;
 }
 
+// Check if the basis set constructed for input file is correct
 int Basis_reading(std::string fin, std::string fout){
     JobInfo MyJob;
     std::cout << "Input: " << fin << "\n";

@@ -9,11 +9,12 @@ class AO
 {
     public:
         arma::vec R0;
-        arma::Col<unsigned int> lmn;
-        arma::vec alpha;
-        arma::vec d_coe;
-        int len;
-        std::string lable;
+        arma::Col<unsigned int> lmn; // angular momentum of x, y, z
+        arma::vec alpha; // exponent
+        arma::vec d_coe; // contraction coefficient
+        int len; // number of primitive gaussians, the length of alpha, d_coe
+        std::string lable; // lable of the AO, like s, px, py, pz, dxx, dxy, dxz, dyy, dyz, dzz, fxxx, fxxy, fxxz, fxyy, fxyz, fxzz, fyyy, fyyz, fyzz, fzzz...
+        //constructor
         AO(arma::vec R0_input, arma::vec alpha_input, arma::vec d_input, arma::Col<unsigned int> lmn_input, const std::string & lable_input);
         ~AO(){}
         void printinfo();

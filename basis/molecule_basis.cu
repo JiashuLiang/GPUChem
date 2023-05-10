@@ -34,9 +34,8 @@ void copy_molecule_basis_to_gpu(const Molecule_basis& mol_basis, Molecule_basisG
         // Copy the AOGPU object to the mAOs array on the GPU
         cudaMemcpy(mol_basis_gpu.mAOs + i, &ao_gpu, sizeof(AOGPU), cudaMemcpyHostToDevice);
     }
-    
-    
-    
+
+
     // Create temporary arrays to hold the atom coordinates and effective charges
     arma::mat atom_coords(3, num_atoms);
     std::vector<int> effective_charges(num_atoms);
@@ -141,7 +140,6 @@ void copy_sorted_molecule_basis_to_gpu(const Molecule_basis& mol_basis, Molecule
     }
     
     
-    
     // Create temporary arrays to hold the atom coordinates and effective charges
     arma::mat atom_coords(3, num_atoms);
     std::vector<int> effective_charges(num_atoms);
@@ -169,7 +167,7 @@ void copy_sorted_molecule_basis_to_gpu(const Molecule_basis& mol_basis, Molecule
 
 
 
-
+// Some print functions for debugging purposes
 __global__ void printAOR(double *R)
 {
     int id = threadIdx.x + blockIdx.x * blockDim.x;

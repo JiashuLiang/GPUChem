@@ -43,6 +43,7 @@ int sort_AOs(std::vector<AO> &unsorted_AOs, std::vector<AO> &sorted_AOs, arma::u
 
     std::vector<AO> s_orbs, px_orbs, py_orbs, pz_orbs;
     std::vector<arma::uword> s_orbs_ind, px_orbs_ind, py_orbs_ind, pz_orbs_ind;
+    //separate s, px, py, pz orbitals
     for (size_t mu = 0; mu < unsorted_AOs.size(); mu++){
         size_t lx = unsorted_AOs[mu].lmn(0);
         size_t ly = unsorted_AOs[mu].lmn(1);
@@ -81,9 +82,12 @@ int sort_AOs(std::vector<AO> &unsorted_AOs, std::vector<AO> &sorted_AOs, arma::u
     //combine s_orbs_ind, px_orbs_ind, py_orbs_ind, pz_orbs_ind into sorted_indices
     sorted_indices.set_size(s_orbs_ind.size() + px_orbs_ind.size() + py_orbs_ind.size() + pz_orbs_ind.size());
     sorted_indices.subvec(sorted_offs(0), sorted_offs(1) -1) = arma::conv_to<arma::uvec>::from(s_orbs_ind);
-    sorted_indices.subvec(sorted_offs(1), sorted_offs(2) -1) = arma::conv_to<arma::uvec>::from(px_orbs_ind);
-    sorted_indices.subvec(sorted_offs(2), sorted_offs(3) -1) = arma::conv_to<arma::uvec>::from(py_orbs_ind);
-    sorted_indices.subvec(sorted_offs(3), sorted_indices.n_elem -1) = arma::conv_to<arma::uvec>::from(pz_orbs_ind);
+    if (px_orbs_ind.size() > 0)
+        sorted_indices.subvec(sorted_offs(1), sorted_offs(2) -1) = arma::conv_to<arma::uvec>::from(px_orbs_ind);
+    if (py_orbs_ind.size() > 0)
+        sorted_indices.subvec(sorted_offs(2), sorted_offs(3) -1) = arma::conv_to<arma::uvec>::from(py_orbs_ind);
+    if (pz_orbs_ind.size() > 0)
+        sorted_indices.subvec(sorted_offs(3), sorted_indices.n_elem -1) = arma::conv_to<arma::uvec>::from(pz_orbs_ind);
 
     return 0;
 }

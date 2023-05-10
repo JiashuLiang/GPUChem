@@ -6,7 +6,7 @@
 #include <stdio.h>
 
 
-
+// Valance Atomic Number map to store the effective charge of each atom
 std::map<std::string, int> VAN_map { {"h", 1}, {"he", 2}, {"li", 3},  {"be", 4}, {"b", 5},   
                                     {"c", 6}, {"n", 7}, {"o", 8}, {"f", 9},  {"ne", 10}, 
                                     {"na", 11}, {"mg", 12}, {"al", 13}, {"si", 14},  {"p", 15}, 
@@ -39,6 +39,8 @@ void Molecule::reset(){
 
 int Molecule::convert_from_strvecs(std::vector<std::string>::iterator mol_start, std::vector<std::string>::iterator mol_end){
 
+  reset();
+  // read the charge and spin multiplicity (number of single electrons + 1) from the first line
   std::istringstream iss(*mol_start);
   if (!(iss >> m_charge >> num_nonpair_ele)){
       std::cerr << "Setup/molecule.cpp: There is some problem with molecule format.\n ";
@@ -47,7 +49,7 @@ int Molecule::convert_from_strvecs(std::vector<std::string>::iterator mol_start,
   }
   num_nonpair_ele  -=1;
 
-
+  // read the atoms from the second line
   for (std::vector<std::string>::iterator it = mol_start + 1; it !=mol_end; ++it)
   {
     std::istringstream iss(*it);
@@ -59,8 +61,7 @@ int Molecule::convert_from_strvecs(std::vector<std::string>::iterator mol_start,
           std::cerr << *it;
           return 1;
       }
-    
-    Atom readAtom =Atom(atomname, R0);
+    Atom readAtom(atomname, R0);
     mAtoms.push_back(readAtom);
   }
     m_num_atoms = mAtoms.size();
@@ -74,14 +75,3 @@ void Molecule::PrintMoleculeInfo(){
   for(auto atom: mAtoms)
     atom.PrintAtomInfo();
 }
-
-// int Molecule::read_from_file(std::string &fname){
-//     reset();
-//     double charge;
-//     int nunum_nonpair_ele, num_Atoms;
-
-// //   string line;
-// //   getline(in, line);
-// //   istringstream iss(line);
-
-// }

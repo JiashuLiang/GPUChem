@@ -10,6 +10,7 @@ void BasisShell::read_from_strvec(std::vector<std::string>::iterator shell_start
     std::istringstream iss(*shell_start);
     std::vector<std::string> tokens{std::istream_iterator<std::string>{iss}, std::istream_iterator<std::string>{}};
     //Read the first line
+    // Format: Shell_type num_primitives scale_factor
     Shell_type = tokens[0];
     num_primitives = std::stoi(tokens[1]);
     scale_factor = std::stod(tokens[2]);
@@ -17,6 +18,10 @@ void BasisShell::read_from_strvec(std::vector<std::string>::iterator shell_start
     std::vector<double> input_exponents;
     std::vector<std::vector<double>> input_coefficients;
     //Read the rest lines
+    // Format: exponent d_coef1_firstshell d_coef1_secondshell ...
+    //                  d_coef2_firstshell d_coef2_secondshell ...
+    //                  d_coef3_firstshell d_coef3_secondshell ...
+    //                  ... (num_primitives lines)
     for (size_t i = 0; i < num_primitives; i++){
         std::istringstream issi(*(shell_start + i + 1));
         std::vector<std::string> tokens{std::istream_iterator<std::string>{issi}, std::istream_iterator<std::string>{}};
@@ -64,6 +69,7 @@ void BasisShell::PrintShell() const{
 
 BasisSet::BasisSet(const std::string& BasisName) {
     std::string aux;
+    // Check whether the environment variable GPUChem_aux is set
     if(const char* env_p = std::getenv("GPUChem_aux")){
         aux = std::string(env_p);
         if (!std::filesystem::is_directory(aux)) {
@@ -89,6 +95,7 @@ void BasisSet::readBasisFile(const std::string& filename) {
 
     std::string line;
 
+    // Read the basis name from the first line
     std::getline(file, line);
     if (line.find("BASIS=") != std::string::npos) {
         basisName_ = line.substr(line.find("=") + 1);
@@ -102,6 +109,7 @@ void BasisSet::readBasisFile(const std::string& filename) {
         return;
     }
 
+    // Read the rest of the file in lower case and record the line number of the element name
     std::vector<size_t> symbol_idxs; // lines when the basis set starts
     symbol_idxs.push_back(0);
     std::vector<std::string> lines;
@@ -118,8 +126,8 @@ void BasisSet::readBasisFile(const std::string& filename) {
     }
     file.close();
 
+    // begin get the basis info one element by one element
     std::string currentElement;
-    // begin reading the basis set
     for(size_t i = 0; i < symbol_idxs.size() - 1; i++) {
         std::istringstream iss(lines[symbol_idxs[i]]);
         //read the element name as the first non-spacing string
@@ -154,6 +162,7 @@ void BasisSet::readBasisFile(const std::string& filename) {
                     }
                     shell_end++;
                 }
+                // Use the iterator to construct the BasisShell
                 BasisShell currentShell(shell_start, shell_end);
                 currentBasis.push_back(currentShell);
             }
@@ -186,7 +195,6 @@ void BasisSet::readBasisFile(const std::string& filename) {
             SupportedElements_.push_back(first_str);
         }
     }
-
 
     // Check whether the supported elements are all in the keys of basisSets_
     for (auto it : SupportedElements_){

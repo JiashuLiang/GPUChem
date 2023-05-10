@@ -81,9 +81,10 @@ int JobInfo::read_input(std::string &fname){
         return 1;
     }
 
+    // Read the input file line by line in lower case and store in a vector and find the lines containing $ as seperator
     std::ifstream input_file(fin_name);
     std::vector<std::string> lines;
-    std::vector<int> symbol_idxs; // lines containing $
+    std::vector<int> symbol_idxs; // lines containing $ as seperator
     std::string line;
     while (std::getline(input_file, line)) {
         if (line.empty()) {
@@ -98,18 +99,13 @@ int JobInfo::read_input(std::string &fname){
     }
     input_file.close();
 
+    // Check if the input file is complete, containing at least $molecule, $end, $rem, and $end 
     if(symbol_idxs.size() < 4){
         std::cerr << "Error: Input File is not complete!\n";
         return 1;
     }
 
-    // for (const auto& l : lines) {
-    //     std::cout << l << '\n';
-    // }
-    // for (const auto& l : symbol_idxs) {
-    //     std::cout << l << '\n';
-    // }
-
+    // to find the start and end of $molecule and $rem
     auto mol_start= lines.end(), mol_end = lines.end(), rem_start = lines.end(), rem_end = lines.end();
     for(auto it= symbol_idxs.begin(); it != symbol_idxs.end(); ++it){
         if(lines[*it].find("$molecule") != std::string::npos ){
@@ -124,6 +120,7 @@ int JobInfo::read_input(std::string &fname){
         }
     }
 
+    // Read the molecule and section
     if (mol_start == lines.end() || mol_end == lines.end()) {
         std::cerr << "Error: Input File does not have a complete molecule section!\n";
         return 1;
@@ -131,6 +128,7 @@ int JobInfo::read_input(std::string &fname){
         m_molecule.convert_from_strvecs(mol_start, mol_end);
     }
 
+    // Read the rem section
     if (rem_start == lines.end() || rem_end == lines.end()) {
         std::cerr << "Error: Input File does not have a complete rem section!\n";
         return 1;
@@ -142,10 +140,12 @@ int JobInfo::read_input(std::string &fname){
                 std::cerr << "Error: Input File does not have a correct rem section!\n";
                 return 1;
             }
+            // delete the comment part after !
             size_t exclamation = value.find('!');
             std::string nocomment_value = value.substr(0, exclamation);
+            // remove all dashes
             nocomment_value.erase(std::remove(nocomment_value.begin(), nocomment_value.end(), '-'), nocomment_value.end()); // remove all dashes
-            REM_map.insert_or_assign(rem, nocomment_value);
+            REM_map.insert_or_assign(rem, nocomment_value); // replace the value if the key already exists
         }
     }
 
@@ -155,7 +155,7 @@ int JobInfo::read_input(std::string &fname){
 
 
 std::string JobInfo::GetRem(const std::string &key){
-    // find whether the key exists, return the value if it exists, otherwise throw an error
+    // find whether the key exists, return the value if it exists or it has default value, otherwise throw an error
     auto it = REM_map.find(key);
     if (it != REM_map.end()){
         return it->second;

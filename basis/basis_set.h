@@ -7,23 +7,31 @@
 #include <utility>
 #include <armadillo>
 
+// This class is used to store the information of a basis shell
+// Components of a BasisSet class
 class BasisShell{
     public:
-    std::string Shell_type;
-    int num_primitives;
-    double scale_factor;
-    arma::vec exponents;
-    arma::mat coefficients; // the outer is the number of contractions, the inner is the number of different angular momentums
+    std::string Shell_type; // S, P, SP, D, F, 
+    int num_primitives; // number of primitive gaussians
+    double scale_factor; // scale factor for the whole shell
+    arma::vec exponents; // the exponents of the primitive gaussians
+    arma::mat coefficients; // one column is the contraction coefficients for one kind of shell
 
     BasisShell() = default;
     BasisShell(std::string shell_type, int num_p, arma::vec expo, arma::mat coef):
         Shell_type(shell_type), num_primitives(num_p), exponents(expo), coefficients(coef){}
-    void read_from_strvec(std::vector<std::string>::iterator shell_start, std::vector<std::string>::iterator shell_end);
+    
+    // using read_from_strvec to construct a BasisShell
     BasisShell(std::vector<std::string>::iterator shell_start, std::vector<std::string>::iterator shell_end);
+    
+    // read the basis shell from a string vectors, usually read from a block of a basis set file
+    void read_from_strvec(std::vector<std::string>::iterator shell_start, std::vector<std::string>::iterator shell_end);
     void PrintShell() const;
 };
 
 
+// This class is used to store the basis set information
+// Usually read from a basis set file in the Q-Chem format
 class BasisSet {
 public:
     BasisSet() = default;

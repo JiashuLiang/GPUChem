@@ -86,9 +86,9 @@ int Molecule_basis::Construct_basis(const BasisSet& basis_set) {
         // Retrieve the basis functions for the element
         std::vector<BasisShell> element_basis = basis_set.getElementBasis(element);
 
-        // Iterate through each basis function
+        // Iterate through shell of the element
         for (const auto& shell : element_basis) {
-            // Create a new AO object for the basis function
+            // Create new AO objects as the basis functions
             addBasisShell(shell, atom.m_coord);
         }
     }

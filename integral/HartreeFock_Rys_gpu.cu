@@ -1,4 +1,4 @@
-#include "HartreeFock_Rys_gpu.cuh"
+#include "Hamiltonian.cuh"
 #include "hcore.cuh"
 #include "JKmat.cuh"
 #include <filesystem>
