@@ -17,6 +17,6 @@ H	0.00	1.22   -5.15
 $end
 
 $rem
-method HF
+method HF_GPU
 basis 6-311G
 $end

@@ -95,6 +95,7 @@ int HartreeFock_Rys_gpu::eval_OV(arma::mat &OV_mat)
 
 int HartreeFock_Rys_gpu::eval_Hcore(arma::mat &H_mat)
 {
+    H_mat.zeros();
     // evaluate the H core matrix (one-electron part)
     int ok = eval_Hcoremat_without_sort_inside(m_molbasis_gpu, H_mat);
     // int ok = eval_Hcoremat(m_molbasis_gpu, m_molbasis, H_mat);
@@ -130,10 +131,13 @@ int HartreeFock_Rys_gpu::eval_G(arma::mat &P_mat, arma::mat &G_mat)
 
     // copy G_mat from GPU to CPU
     cudaMemcpy(G_mat.memptr(), G_mat_gpu, sizeof(double) * G_mat.n_elem, cudaMemcpyDeviceToHost);
-
+    cudaFree(P_mat_gpu);
+    cudaFree(G_mat_gpu);
+    
     if (sort_AO)
         G_mat = G_mat(m_molbasis.mAOs_sorted_index_inv, m_molbasis.mAOs_sorted_index_inv);
 
+    
     return ok;
 }
 
@@ -168,6 +172,8 @@ int HartreeFock_Rys_gpu::eval_J(arma::mat &P_mat, arma::mat &J_mat)
 
     // copy J_mat from GPU to CPU
     cudaMemcpy(J_mat.memptr(), J_mat_gpu, sizeof(double) * J_mat.n_elem, cudaMemcpyDeviceToHost);
+    cudaFree(P_mat_gpu);
+    cudaFree(J_mat_gpu);
 
     if (sort_AO)
         J_mat = J_mat(m_molbasis.mAOs_sorted_index_inv, m_molbasis.mAOs_sorted_index_inv);
@@ -205,6 +211,8 @@ int HartreeFock_Rys_gpu::eval_K(arma::mat &P_mat, arma::mat &K_mat)
 
     // copy K_mat from GPU to CPU
     cudaMemcpy(K_mat.memptr(), K_mat_gpu, sizeof(double) * K_mat.n_elem, cudaMemcpyDeviceToHost);
+    cudaFree(P_mat_gpu);
+    cudaFree(K_mat_gpu);
 
     if (sort_AO)
         K_mat = K_mat(m_molbasis.mAOs_sorted_index_inv, m_molbasis.mAOs_sorted_index_inv);

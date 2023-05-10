@@ -36,65 +36,56 @@ __global__ void construct_S_whole_mat(double* Smat,  AOGPU* mAOs, size_t nbsf);
 
 int eval_OVmat_without_sort_inside(Molecule_basisGPU& system, arma::mat &S_mat){
     const size_t nbsf = system.num_ao;
-    S_mat.set_size(nbsf,nbsf);
-    S_mat.zeros();
 
-    // Copy Smatrices
     double *S_mat_gpu;
-
     cudaMalloc((void**)&S_mat_gpu, nbsf * nbsf* sizeof(double));
-    cudaMemset(S_mat_gpu, 0.0, sizeof(double) * nbsf*nbsf);
+    cudaMemset(S_mat_gpu, 0, sizeof(double) * nbsf*nbsf);
 
-    // MARKER
-    // Perform construction of S, sorted into blocks of ss, sp, ps,pp
-    int num_blocks = (nbsf * nbsf /NUM_THREADS)+ 1;
+    int num_blocks = (nbsf * nbsf + NUM_THREADS -1)/ NUM_THREADS;
     construct_S_whole_mat<<<num_blocks,NUM_THREADS>>>(S_mat_gpu, system.mAOs, nbsf);
-    // return S_mat to its original order.
-    cudaMemcpy(S_mat.memptr(), S_mat_gpu, nbsf * nbsf * sizeof(double), cudaMemcpyDeviceToHost);
-
+    
+    cudaMemcpy(S_mat.memptr(), S_mat_gpu, S_mat.n_elem * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaFree(S_mat_gpu);
+    
     return 0;
 }
 
 
 int eval_Hcoremat_without_sort_inside(Molecule_basisGPU& system, arma::mat &H_mat){
     const size_t nbsf = system.num_ao;
-    H_mat.set_size(nbsf,nbsf);
-    H_mat.zeros();
-
-    // create V matrix
-    double *V_mat_ptr = new double[nbsf*nbsf]; 
-    double *T_mat_gpu, *V_mat_gpu;
-
-    cudaMalloc((void**)&T_mat_gpu, nbsf * nbsf* sizeof(double));
-    cudaMemset(T_mat_gpu, 0.0, sizeof(double) * nbsf*nbsf);
+    arma::mat V_mat(nbsf,nbsf);
     
+    double *T_mat_gpu, *V_mat_gpu;
+    cudaMalloc((void**)&T_mat_gpu, nbsf * nbsf* sizeof(double));
+    cudaMemset(T_mat_gpu, 0, sizeof(double) * nbsf*nbsf);
     cudaMalloc((void**)&V_mat_gpu, nbsf * nbsf* sizeof(double));
-    cudaMemset(V_mat_gpu, 0.0, sizeof(double) * nbsf*nbsf);
+    cudaMemset(V_mat_gpu, 0, sizeof(double) * nbsf*nbsf);
 
-    int num_blocks = (nbsf * nbsf /NUM_THREADS)+ 1;
+    int num_blocks = (nbsf * nbsf + NUM_THREADS -1)/ NUM_THREADS;
     //Construct Tmat
     construct_T<<<num_blocks,NUM_THREADS>>>(T_mat_gpu, system.mAOs, nbsf);
-    cudaDeviceSynchronize();
+    
     cudaError_t cudaStatus = cudaGetLastError();
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "construct_T launch failed: %s\n", cudaGetErrorString(cudaStatus));
         // goto Error;
     }
     // use H_mat to store T_mat 
-    cudaMemcpy(H_mat.memptr(), T_mat_gpu,  nbsf * nbsf * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(H_mat.memptr(), T_mat_gpu,  H_mat.n_elem * sizeof(double), cudaMemcpyDeviceToHost);
 
-    //Construct Vmat
+    // Construct Vmat
     construct_V<<<num_blocks,NUM_THREADS>>>(V_mat_gpu, system.mAOs, nbsf, system.Atom_coords, system.effective_charges, system.num_atom);
-    cudaDeviceSynchronize();
     cudaStatus = cudaGetLastError();
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "construct_V launch failed: %s\n", cudaGetErrorString(cudaStatus));
         // goto Error;
     }
-    cudaMemcpy(V_mat_ptr, V_mat_gpu, nbsf * nbsf * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(V_mat.memptr(), V_mat_gpu, H_mat.n_elem * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaFree(T_mat_gpu);
+    cudaFree(V_mat_gpu);
     
-    arma::mat V_mat(V_mat_ptr,nbsf,nbsf,true,false);
     H_mat += V_mat;
+    
     
     // H_mat.print("H_mat");
     return 0;
@@ -389,7 +380,12 @@ __device__ void construct_S_block(double* Smat,  AOGPU* mAOs, size_t mu_start_in
 
 __global__ void construct_S_whole_mat(double* Smat,  AOGPU* mAOs, size_t nbsf){
    size_t tid = threadIdx.x + blockIdx.x * blockDim.x;
-    construct_S_block(Smat, mAOs, 0, 0, nbsf, nbsf, nbsf, tid); 
+    if (tid >= nbsf*nbsf) return;
+    size_t mu = tid % nbsf;
+    size_t nu = tid / nbsf;
+    
+    Smat[tid] = eval_Smunu(mAOs[mu], mAOs[nu]);
+    // construct_S_block(Smat, mAOs, 0, 0, nbsf, nbsf, nbsf, tid); 
 }
 
 
@@ -472,15 +468,24 @@ __global__ void construct_TV(double* Tmat, double* Vmat, AOGPU* mAOs, size_t nbs
 
 __global__ void construct_T(double* Tmat, AOGPU* mAOs, size_t nbsf){
     size_t tid = threadIdx.x + blockIdx.x * blockDim.x;
-    construct_T_block(Tmat, mAOs, 0,  0, nbsf,  nbsf, nbsf, tid); // ss
+    if (tid >= nbsf*nbsf) return;
+    size_t mu = tid % nbsf;
+    size_t nu = tid / nbsf;
+    
+    Tmat[tid] = eval_Tmunu(mAOs[mu], mAOs[nu]);
+    // construct_T_block(Tmat, mAOs, 0,  0, nbsf,  nbsf, nbsf, tid); // ss
 
 }
 
 
 __global__ void construct_V(double* Vmat, AOGPU* mAOs, size_t nbsf, double* Atom_coords, const int* effective_charges, const int num_atom){
     size_t tid = threadIdx.x + blockIdx.x * blockDim.x;
-    // size_t p_dim = nbsf - p_start_ind;
-    construct_V_block(Vmat, mAOs, 0, 0, nbsf,  nbsf, nbsf, Atom_coords, effective_charges, num_atom, tid); // ss
+    if (tid >= nbsf*nbsf) return;
+    size_t mu = tid % nbsf;
+    size_t nu = tid / nbsf;
+    
+    Vmat[tid] = eval_Vmunu(mAOs[mu], mAOs[nu], Atom_coords, effective_charges, num_atom);
+    // construct_V_block(Vmat, mAOs, 0, 0, nbsf,  nbsf, nbsf, Atom_coords, effective_charges, num_atom, tid); // ss
 }
 
 
@@ -796,14 +801,22 @@ __device__ double overlap_1d(int l1, int l2, double PminusA_1d, double PminusB_1
 __device__ double overlap(double* A,  int l1, int m1, int n1, double alpha, double* B, int l2, int m2, int n2,double beta ){
     double gamma = alpha + beta;
     // printf("started overlap\n");
-    vector_gpu A_vec(A,3);
-    vector_gpu B_vec(B,3);
-    // printf("Finished def A and B\n");
-    vector_gpu P_vec = gaussian_product_center(alpha, A_vec, beta, B_vec);
-    // printf("Finished gaussian_product_center\n");
-    double* P = P_vec.coords();
+    // vector_gpu A_vec(A,3);
+    // vector_gpu B_vec(B,3);
+    // // printf("Finished def A and B\n");
+    // vector_gpu P_vec = gaussian_product_center(alpha, A_vec, beta, B_vec);
+    // // printf("Finished gaussian_product_center\n");
+    // double* P = P_vec.coords();
+
+    double P[3];
+    double AmBnormSquare = 0.0;
+    for(int i = 0; i < 3; i++){
+        P[i] = (alpha*A[i]+ beta*B[i])/gamma;
+        AmBnormSquare += (A[i]-B[i]) * (A[i]-B[i]);
+    }
     
-    double prefactor = pow(M_PI/gamma,1.5) * exp(-alpha * beta * pow((A_vec-B_vec).norm(),2)/gamma);
+    
+    double prefactor = pow(M_PI/gamma,1.5) * exp(-alpha * beta * AmBnormSquare /gamma);
     // printf("Finished prefactor\n");
     // printf("Calculating overlap 1d\n");
     // printf("P( %1.2f, %1.2f, %1.2f),A:( %1.2f, %1.2f, %1.2f), B( %1.2f, %1.2f, %1.2f), alpha (%1.2f), beta (%1.2f)\n", P[0], P[1], P[2],A[0], A[1], A[2],B[0], B[1], B[2], alpha, beta);
@@ -856,47 +869,86 @@ __device__ vector_gpu A_tensor(int l1, int l2, double PA, double PB, double CP, 
         }
     }
     vector_gpu A(A_coords,Imax);
+    free(A_coords);
     return A;
-
 }
+
+__device__ void A_tensor_new(double * A, int Imax, int l1, int l2, double PA, double PB, double CP, double g){
+    for (int i = 0; i < Imax; i++){
+        A[i] = 0.0;
+    }
+
+    for (int i = 0; i < Imax; i++){
+        for (int r = 0; r < int(floorf(i/2)+1); r++){
+            for (int u = 0; u < int(floorf((i-2*r)/2)+1); u++){
+                int  I = i - 2*r - u;
+                A[I] = A[I] + A_term(i,r,u,l1,l2,PA,PB,CP,g);
+            }
+        }
+    }
+
+    return;
+}
+
 __device__ double nuclear_attraction(double *A,int l1, int m1, int n1,double alpha, double *B, int l2, int m2, int n2,double beta, double *C){
     // Formulation from JPS (21) 11, Nov 1966 by H Taketa et. al
-    vector_gpu A_vec(A,3);
-    vector_gpu B_vec(B,3);
-    vector_gpu C_vec(C,3);
+    // vector_gpu A_vec(A,3);
+    // vector_gpu B_vec(B,3);
+    // vector_gpu C_vec(C,3);
     double gamma = alpha + beta;
 
-    vector_gpu P_vec = gaussian_product_center(alpha, A_vec, beta, B_vec);
-    // double P* =
-    // double rab2 = pow(arma::norm(A-B),2);
-    // double rcp2 = pow(arma::norm(C-P),2);
-
-    double rab2 = pow((A_vec-B_vec).norm(),2);
-    double rcp2 = pow((C_vec-P_vec).norm(),2);
+    // vector_gpu P_vec = gaussian_product_center(alpha, A_vec, beta, B_vec);
     
-    vector_gpu dPA_vec = P_vec-A_vec;
-    vector_gpu dPB_vec = P_vec-B_vec;
-    vector_gpu dPC_vec = P_vec-C_vec;
+    double P[3], dPA[3], dPB[3], dPC[3];
+    double rab2 = 0.0, rcp2 = 0.0;
+    for(int i = 0; i < 3; i++){
+        rab2 += (A[i]-B[i]) * (A[i]-B[i]);
+        P[i] = (alpha*A[i]+ beta*B[i])/gamma;
+        rcp2 += (C[i]-P[i]) * (C[i]-P[i]);
+        dPA[i] = P[i] - A[i];
+        dPB[i] = P[i] - B[i];
+        dPC[i] = P[i] - C[i];
+    }
+    // double rab2 = pow((A_vec-B_vec).norm(),2);
+    // double rcp2 = pow((C_vec-P_vec).norm(),2);
+    
+    // vector_gpu dPA_vec = P_vec-A_vec;
+    // vector_gpu dPB_vec = P_vec-B_vec;
+    // vector_gpu dPC_vec = P_vec-C_vec;
 
-    double* dPA = dPA_vec.coords();
-    double* dPB = dPB_vec.coords();
-    double* dPC = dPC_vec.coords();
+    // double* dPA = dPA_vec.coords();
+    // double* dPB = dPB_vec.coords();
+    // double* dPC = dPC_vec.coords();
+    
+    int Imax = l1+l2+1;
+    int Jmax = m1+m2+1;
+    int Kmax = n1+n2+1;
+    double * Ax =new double[Imax];
+    double * Ay =new double[Jmax];
+    double * Az =new double[Kmax];
+    
 
-    vector_gpu Ax_vec = A_tensor(l1,l2,dPA[0],dPB[0],dPC[0],gamma);
-    vector_gpu Ay_vec = A_tensor(m1,m2,dPA[1],dPB[1],dPC[1],gamma);
-    vector_gpu Az_vec = A_tensor(n1,n2,dPA[2],dPB[2],dPC[2],gamma);
+    A_tensor_new(Ax, Imax, l1,l2,dPA[0],dPB[0],dPC[0],gamma);
+    A_tensor_new(Ay, Jmax, m1,m2,dPA[1],dPB[1],dPC[1],gamma);
+    A_tensor_new(Az, Kmax, n1,n2,dPA[2],dPB[2],dPC[2],gamma);
 
-    double* Ax = Ax_vec.coords();
-    double* Ay = Ay_vec.coords();
-    double* Az = Az_vec.coords();
+    // vector_gpu Ax_vec = A_tensor_new(l1,l2,dPA[0],dPB[0],dPC[0],gamma);
+    // vector_gpu Ay_vec = A_tensor(m1,m2,dPA[1],dPB[1],dPC[1],gamma);
+    // vector_gpu Az_vec = A_tensor(n1,n2,dPA[2],dPB[2],dPC[2],gamma);
+    // double* Ax = Ax_vec.coords();
+    // double* Ay = Ay_vec.coords();
+    // double* Az = Az_vec.coords();
 
     double total = 0.0;
 
     // printf("nuclear_attraction: reached for-loops\n");
-    for (int I = 0; I < l1+l2+1; I++)
-        for (int J = 0; J < m1+m2+1; J++)
-            for (int K = 0; K < n1+n2+1; K++)
+    for (int I = 0; I < Imax; I++)
+        for (int J = 0; J < Jmax; J++)
+            for (int K = 0; K < Kmax; K++)
                 total += Ax[I]*Ay[J]*Az[K]*Fgamma(I+J+K,rcp2*gamma);
+    delete[] Ax;
+    delete[] Ay;
+    delete[] Az;
                 
     double val= -2*M_PI/gamma*exp(-alpha*beta*rab2/gamma)*total;
     return val;

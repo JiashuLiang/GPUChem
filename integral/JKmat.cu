@@ -52,8 +52,8 @@ int eval_Gmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz_
 
 	// Allocate GPU memory for J and K matrices
 	double *J_mat, *K_mat;
-	cudaMallocManaged((void **)&J_mat, nbasis * nbasis * sizeof(double));
-	cudaMallocManaged((void **)&K_mat, nbasis * nbasis * sizeof(double));
+	cudaMalloc((void **)&J_mat, nbasis * nbasis * sizeof(double));
+	cudaMalloc((void **)&K_mat, nbasis * nbasis * sizeof(double));
 	// Set J and K matrices to zero
 	cudaMemset(J_mat, 0, nbasis * nbasis * sizeof(double));
 	cudaMemset(K_mat, 0, nbasis * nbasis * sizeof(double));
@@ -68,6 +68,8 @@ int eval_Gmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz_
 	int blockSize = 256;
 	int numBlocks = (nbasis * nbasis + blockSize - 1) / blockSize;
 	eval_Gmat_RSCF_kernel<<<numBlocks, blockSize>>>(J_mat, K_mat, G_mat, nbasis);
+    cudaFree(J_mat);
+    cudaFree(K_mat);
 
 	return 0;
 }
@@ -156,8 +158,6 @@ __global__ void eval_JKmat_RSCF_kernel(AOGPU* d_mAOs, double* d_rys_root, double
         atomicAdd(&d_J_mat[nu * nbasis + mu], partial_sums[0]);
         if(mu != nu)
             atomicAdd(&d_J_mat[mu * nbasis + nu], partial_sums[0]);
-		// print J_mat[nu * nbasis + mu] and J_mat[mu * nbasis + nu] to debug
-		// printf("J_mat[%d, %d] = %f, J_mat[%d, %d] = %f\n", nu, mu, d_J_mat[nu * nbasis + mu], mu, nu, d_J_mat[mu * nbasis + nu]);
     }
 }
 
@@ -238,6 +238,8 @@ __global__ void eval_Jmat_RSCF_kernel(AOGPU* d_mAOs, double* d_rys_root, double*
         atomicAdd(&d_J_mat[nu * nbasis + mu], partial_sums[0]);
         if(mu != nu)
             atomicAdd(&d_J_mat[mu * nbasis + nu], partial_sums[0]);
+		// print J_mat[nu * nbasis + mu] and J_mat[mu * nbasis + nu] to debug
+		// printf("J_mat[%d, %d] = %f, J_mat[%d, %d] = %f\n", nu, mu, d_J_mat[nu * nbasis + mu], mu, nu, d_J_mat[mu * nbasis + nu]);
     }
 }
 
@@ -255,6 +257,7 @@ int eval_Jmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz_
 	// dim3 blockDim(1);
 	// dim3 gridDim(1, 1, 1);
     
+	cudaMemset(J_mat, 0, nbasis * nbasis * sizeof(double));
     // Call the kernel
     eval_Jmat_RSCF_kernel<<<gridDim, blockDim>>>(system.mAOs, rys_root, Schwarz_mat, schwarz_tol_sq, schwarz_max, 
 			nbasis, Pa_mat, J_mat, rys_root_dim1);
@@ -327,6 +330,7 @@ int eval_Kmat_RSCF(Molecule_basisGPU& system, double* rys_root, double* Schwarz_
 	dim3 blockDim(threadsPerBlock);
 	dim3 gridDim(nbasis, nbasis, gridDimZ);
 
+	cudaMemset(K_mat, 0, nbasis * nbasis * sizeof(double));
     // Call the kernel
     eval_Kmat_RSCF_kernel<<<gridDim, blockDim>>>(system.mAOs, rys_root, Schwarz_mat, schwarz_tol_sq, nbasis, Pa_mat, K_mat, rys_root_dim1);
 

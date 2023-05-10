@@ -22,8 +22,6 @@ RSCF::RSCF(Molecule_basis &m_molbasis_i, int max_it, double tolerence,
     S_mat.set_size(nbasis, nbasis);
 
     // std::cout << std::setprecision(3);
-    // gamma.print("gamma");
-    // S.print("Overlap");
 
     // Create the Hamiltonian object
     if (hamiltonian_name == "hf_gpu")

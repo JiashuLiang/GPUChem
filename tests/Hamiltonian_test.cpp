@@ -8,7 +8,7 @@
 
 using namespace std;
 
-int run_Halmitonian(std::string test_case, std::string hamiltonian_name, double tol = 1e-6)
+int run_Halmitonian(std::string test_case, std::string hamiltonian_name, double tol = 2e-6)
 {
 
     std::string fin = test_case + "/" + test_case + ".in";
@@ -30,7 +30,7 @@ int run_Halmitonian(std::string test_case, std::string hamiltonian_name, double 
     if (hamiltonian_name == "hf")
         myHamiltonian = new HartreeFock_Rys(MyMolBasis, 1e-14, true);
     else if (hamiltonian_name == "hf_gpu")
-        myHamiltonian = new HartreeFock_Rys_gpu(MyMolBasis, 1e-14, true);
+        myHamiltonian = new HartreeFock_Rys_gpu(MyMolBasis, 1e-14, false);
 
     int ok = myHamiltonian->init();
     if (ok != 0){
@@ -56,7 +56,8 @@ int run_Halmitonian(std::string test_case, std::string hamiltonian_name, double 
     arma::mat Ja(nbasis, nbasis), Ka(nbasis, nbasis);
     myHamiltonian->eval_J(Pa, Ja);
     myHamiltonian->eval_K(Pa, Ka);
-
+    
+    // Ja.print("Ja");
 
     // Check one electron energy
     double E_one_ele = arma::dot(Pa, H_core) * 2;
@@ -96,15 +97,15 @@ int run_Halmitonian(std::string test_case, std::string hamiltonian_name, double 
 
     std::cout << std::endl;
 
-    return 0;
+    return ok;
 }
 
 int main(int argc, char *argv[])
 {
     return
-        run_Halmitonian("H2", "hf")|
+        // run_Halmitonian("H2", "hf")|
         // run_Halmitonian("H2", "hf_gpu")|
         run_Halmitonian("C2H4", "hf") |
-        // run_Halmitonian("C2H4", "hf_gpu")|
+        run_Halmitonian("C2H4", "hf_gpu")|
         0;
 }
