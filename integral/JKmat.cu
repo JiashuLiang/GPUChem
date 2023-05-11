@@ -58,51 +58,63 @@ int eval_Gmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz_
 	cudaMemset(J_mat, 0, nbasis * nbasis * sizeof(double));
 	cudaMemset(K_mat, 0, nbasis * nbasis * sizeof(double));
 
-	// Calculate J_mat and K_mat on GPU using eval_Jmat_RSCF and eval_Kmat_RSCF
+	// Calculate J_mat and K_mat on GPU using eval_Jmat_RSCF and eval_Kmat_RSCF (not efficient)
 	// eval_Jmat_RSCF(system, rys_root, Schwarz_mat, schwarz_tol, schwarz_max, Pa_mat, J_mat, rys_root_dim1);
 	// eval_Kmat_RSCF(system, rys_root, Schwarz_mat, schwarz_tol, schwarz_max, Pa_mat, K_mat, rys_root_dim1);
-	eval_JKmat_RSCF(system, rys_root, Schwarz_mat, schwarz_tol, schwarz_max, Pa_mat, J_mat, K_mat, rys_root_dim1);
 
+	// Calculate J_mat and K_mat on GPU using eval_JKmat_RSCF_kernel (efficient)
+	eval_JKmat_RSCF(system, rys_root, Schwarz_mat, schwarz_tol, schwarz_max, Pa_mat, J_mat, K_mat, rys_root_dim1);
 
 	// Calculate G_mat = 2 * J_mat - K_mat on GPU using eval_Gmat_RSCF_kernel
 	int blockSize = 256;
 	int numBlocks = (nbasis * nbasis + blockSize - 1) / blockSize;
 	eval_Gmat_RSCF_kernel<<<numBlocks, blockSize>>>(J_mat, K_mat, G_mat, nbasis);
+
     cudaFree(J_mat);
     cudaFree(K_mat);
-
 	return 0;
 }
 
 
 __global__ void eval_JKmat_RSCF_kernel(AOGPU* d_mAOs, double* d_rys_root, double* d_Schwarz_mat, 
 		double schwarz_tol_sq, double schwarz_max, int nbasis, double* d_Pa_mat, double* d_J_mat, double *d_K_mat, int rys_root_dim1) {
+	// Using symmetry to reduce the number of 2eint calculations
+	// (mu la | si nu) = (mu la | nu si) = (la mu | si nu) = (la mu | nu si)
+	// J_{mu nu} = J_{nu mu} = \sum_{si,la}(mu nu | si la) P_{si la} = \sum_{si < la}(mu la | si nu) P_{si la}  + \sum_{si}(mu la | si si) P_{si si} 
+	// K_{mu nu} = \sum_{si,la}(mu la | si nu) P_{si la} 
+	// K_{mu si} = \sum_{nu,la}(mu la | nu si) P_{nu la}
+	// K_{la nu} = \sum_{mu,si}(la mu | si nu) P_{si mu}
+	// K_{la si} = \sum_{mu,nu}(la mu | nu si) P_{nu mu}
+
     int mu = blockIdx.x;
     int nu = blockIdx.y;
-
+	// save half time by only calculating the right-upper triangle of the mu nu blocks
     if (mu >= nbasis || nu >= nbasis || mu > nu) {
         return;
     }
-
+	// Schwarz screening
     if (d_Schwarz_mat[nu * nbasis + mu] * schwarz_max < schwarz_tol_sq) {
         return;
     }
 
-
+	// Calculate the index of this si la block
+	// Block(mu, nu, z) corresponds to one mu, one nu. And all z together will cover all si la 
+	// But do si la one block by one block, so that we can increase the possibility that one block will have same kinds of (mu nu| si la)
+	// like (s px | py s), （s s|s s), and so on 
 	int numblocks_1d = (nbasis + OneDemension_threadsPerBlock - 1) / OneDemension_threadsPerBlock;
     int si_block_idx = blockIdx.z / numblocks_1d;
     int la_block_idx = blockIdx.z % numblocks_1d;
 
+	// save half time by only calculating the right-upper triangle of the si la blocks
 	if (si_block_idx > la_block_idx) {
 		return;
 	}
 
-
     int si = threadIdx.x + blockDim.x * si_block_idx;
     int la = threadIdx.y + blockDim.y * la_block_idx;
 
-    // Use shared memory to store partial sums
-    __shared__ double partial_sums[threadsPerBlock_forNbasisSquare];
+    // Use shared memory to store partial sums, set size to be the same as the block size
+    __shared__ double partial_sums[OneDemension_threadsPerBlock * OneDemension_threadsPerBlock];
 
     // Initialize shared memory
 	int tid = threadIdx.x + blockDim.x * threadIdx.y;
@@ -123,18 +135,23 @@ __global__ void eval_JKmat_RSCF_kernel(AOGPU* d_mAOs, double* d_rys_root, double
 			// printf("si index = %d, R0 = (%f, %f, %f), lmn = (%d, %d, %d)\n", si, AO_si.R0[0], AO_si.R0[1], AO_si.R0[2], AO_si.lmn[0], AO_si.lmn[1], AO_si.lmn[2]);
 			// printf("la index = %d, R0 = (%f, %f, %f), lmn = (%d, %d, %d)\n", la, AO_la.R0[0], AO_la.R0[1], AO_la.R0[2], AO_la.lmn[0], AO_la.lmn[1], AO_la.lmn[2]);
 
-			// for K matrix
+			// for K matrix, use the symmetry to save 3/4 of the time since we only calculate the right-upper triangle of mu nu and lower triangle of si la
+			// However, we don't know whether so many atomicAdd will slow down the program
             atomicAdd(&d_K_mat[la * nbasis + mu], value * d_Pa_mat[nu * nbasis + si]);
 			if(mu != nu)
 				atomicAdd(&d_K_mat[la * nbasis + nu], value * d_Pa_mat[mu * nbasis + si]);
 
 			if (si == la){
-				partial_sums[tid] = value * d_Pa_mat[la * nbasis + si]; // for J matrix
+				 // we only calculate once along the diagonal here for J matrix
+				partial_sums[tid] = value * d_Pa_mat[la * nbasis + si];
 				// no need to calculate K matrix
 			}
 			else{
-				partial_sums[tid] = 2 * value * d_Pa_mat[la * nbasis + si]; // for J matrix
-				// for K matrix
+				 // for J matrix, we calculate two times beyond the diagonal
+				partial_sums[tid] = 2 * value * d_Pa_mat[la * nbasis + si]; 
+
+				// for K matrix, use the symmetry to save 3/4 of the time
+				// However, we don't know whether so many atomicAdd will slow down the program
 				atomicAdd(&d_K_mat[si * nbasis + mu], value * d_Pa_mat[nu * nbasis + la]);
 				if(mu != nu)
 					atomicAdd(&d_K_mat[si * nbasis + nu], value * d_Pa_mat[mu * nbasis + la]);
@@ -146,7 +163,7 @@ __global__ void eval_JKmat_RSCF_kernel(AOGPU* d_mAOs, double* d_rys_root, double
     __syncthreads();
 
     // Perform parallel reduction
-    for (int stride = threadsPerBlock_forNbasisSquare / 2; stride > 0; stride /= 2) {
+    for (int stride = OneDemension_threadsPerBlock * OneDemension_threadsPerBlock / 2; stride > 0; stride /= 2) {
         if (tid < stride) {
             partial_sums[tid] += partial_sums[tid + stride];
         }
@@ -154,6 +171,7 @@ __global__ void eval_JKmat_RSCF_kernel(AOGPU* d_mAOs, double* d_rys_root, double
     }
 
     // The first thread in the block updates the J_mat with the accumulated value
+	// This decreases the number of atomicAdd accross the thread blocks
     if (tid == 0) {
         atomicAdd(&d_J_mat[nu * nbasis + mu], partial_sums[0]);
         if(mu != nu)
@@ -170,6 +188,8 @@ int eval_JKmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz
     double schwarz_tol_sq = schwarz_tol * schwarz_tol;
 
     // Define the grid and block dimensions
+	// Block(mu, nu, z) corresponds to one mu, one nu. And all z together will cover all si la
+	// Each thread corresponds to one (mu nu si la) - One contracted integral 
 	dim3 blockDim(OneDemension_threadsPerBlock, OneDemension_threadsPerBlock); // OneDemension_threadsPerBlock^2 threads per block
 	int numblocks_1d = (nbasis + OneDemension_threadsPerBlock - 1) / OneDemension_threadsPerBlock;
 	dim3 gridDim(nbasis, nbasis, numblocks_1d * numblocks_1d);
@@ -190,17 +210,20 @@ int eval_JKmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz
 
 __global__ void eval_Jmat_RSCF_kernel(AOGPU* d_mAOs, double* d_rys_root, double* d_Schwarz_mat, 
 		double schwarz_tol_sq, double schwarz_max, int nbasis, double* d_Pa_mat, double* d_J_mat, int rys_root_dim1) {
+	// J_{mu nu} = \sum_{si,la}(mu nu | si la) P_{si la}
     int mu = blockIdx.x;
     int nu = blockIdx.y;
 
+	// save half time by only calculating the right-upper triangle of the mu nu blocks
     if (mu >= nbasis || nu >= nbasis || mu > nu) {
         return;
     }
-
+	// Schwarz screening
     if (d_Schwarz_mat[nu * nbasis + mu] * schwarz_max < schwarz_tol_sq) {
         return;
     }
 
+	// Block(mu, nu, z) corresponds to one mu, one nu. And all z together will cover all si la 
     int index = threadIdx.x + blockDim.x * blockIdx.z;
     int si = index / nbasis;
     int la = index % nbasis;
@@ -211,7 +234,7 @@ __global__ void eval_Jmat_RSCF_kernel(AOGPU* d_mAOs, double* d_rys_root, double*
     // Initialize shared memory
     partial_sums[threadIdx.x] = 0;
 
-    if (si < nbasis && la < nbasis) {
+	if (si < nbasis && la < nbasis) {
         AOGPU AO_mu = d_mAOs[mu];
         AOGPU AO_nu = d_mAOs[nu];
         AOGPU AO_si = d_mAOs[si];
@@ -250,12 +273,11 @@ int eval_Jmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz_
     double schwarz_tol_sq = schwarz_tol * schwarz_tol;
 
     // Define the grid and block dimensions
+	// Block(mu, nu, z) corresponds to one mu, one nu. And all z together will cover all si la 
 	int threadsPerBlock = threadsPerBlock_forNbasisSquare; 
 	int gridDimZ = (nbasis * nbasis + threadsPerBlock - 1) / threadsPerBlock;
 	dim3 blockDim(threadsPerBlock);
 	dim3 gridDim(nbasis, nbasis, gridDimZ);
-	// dim3 blockDim(1);
-	// dim3 gridDim(1, 1, 1);
     
 	cudaMemset(J_mat, 0, nbasis * nbasis * sizeof(double));
     // Call the kernel
@@ -273,13 +295,17 @@ int eval_Jmat_RSCF(Molecule_basisGPU& system, double *rys_root, double *Schwarz_
 }
 
 __global__ void eval_Kmat_RSCF_kernel(AOGPU* d_mAOs, double* d_rys_root, double* d_Schwarz_mat, double schwarz_tol_sq, int nbasis, double* d_Pa_mat, double* d_K_mat, int rys_root_dim1) {
+	// K_{mu nu} = \sum_{si,la}(mu la | si nu) P_{si la}
     int mu = blockIdx.x;
     int nu = blockIdx.y;
 
+	// save half time by only calculating the right-upper triangle of the mu nu blocks
+	// No Swartz screening here for K_mat since mu nu are not in the same side of the integral
     if (mu >= nbasis || nu >= nbasis || mu > nu) {
         return;
     }
 
+	// Block(mu, nu, z) corresponds to one mu, one nu. And all z together will cover all si la 
     int index = threadIdx.x + blockDim.x * blockIdx.z;
     int si = index % nbasis;
     int la = index / nbasis;
@@ -325,6 +351,7 @@ int eval_Kmat_RSCF(Molecule_basisGPU& system, double* rys_root, double* Schwarz_
     double schwarz_tol_sq = schwarz_tol * schwarz_tol;
 
     // Define the grid and block dimensions
+	// Block(mu, nu, z) corresponds to one mu, one nu. And all z together will cover all si la 
 	int threadsPerBlock = threadsPerBlock_forNbasisSquare;
 	int gridDimZ = (nbasis * nbasis + threadsPerBlock - 1) / threadsPerBlock;
 	dim3 blockDim(threadsPerBlock);
@@ -358,9 +385,6 @@ __global__ void eval_Schwarzmat_GPU(AOGPU * mAOs, double *rys_root, double *Schw
 	Schwarz_mat[mu * nbasis + nu] = Schmunu;
 	Schwarz_mat[nu * nbasis + mu] = Schmunu;
 }
-
-
-
 
 
 __device__ double eval_2eint(double *rys_root, AOGPU& AO_i, AOGPU& AO_j, AOGPU& AO_k, AOGPU& AO_l, int rys_root_dim1){

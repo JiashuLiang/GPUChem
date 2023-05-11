@@ -14,12 +14,12 @@ int eval_OVmat(Molecule_basis& system, arma::mat &S_mat){
     S_mat.set_size(nbsf,nbsf);
     S_mat.zeros();
 
+    // Sort AOs as s, px, py, pz
     std::vector<AO> sorted_AOs;
-    arma::uvec sorted_indices;
-    
-    // Sort AOs by type
-    size_t p_start_ind = sort_AOs(system.mAOs, sorted_AOs, sorted_indices);
-
+    arma::uvec sorted_indices, sorted_offs;
+    sort_AOs(system.mAOs, sorted_AOs, sorted_indices, sorted_offs);
+    size_t p_start_ind = sorted_offs(1); // The index of the first p AO
+    // get the inverse permutation to undo the sorting
     arma::uvec undo_sorted_indices = arma::sort_index(sorted_indices);
 
     // Perform construction of S, sorted into blocks of ss, sp, ps,pp
@@ -40,23 +40,17 @@ int eval_Hcoremat(Molecule_basis& system, arma::mat &H_mat){
     T_mat.zeros();
     V_mat.zeros();
 
+    // Sort AOs as s, px, py, pz
     std::vector<AO> sorted_AOs;
-    arma::uvec sorted_indices;
-    
-    // Sort AOs by type
-    size_t p_start_ind = sort_AOs(system.mAOs, sorted_AOs, sorted_indices);
-
+    arma::uvec sorted_indices, sorted_offs;
+    sort_AOs(system.mAOs, sorted_AOs, sorted_indices, sorted_offs);
+    size_t p_start_ind = sorted_offs(1); // The index of the first p AO
+    // get the inverse permutation to undo the sorting
     arma::uvec undo_sorted_indices = arma::sort_index(sorted_indices);
 
     // Perform construction of H, sorted into blocks of ss, sp, ps,pp
     construct_V(V_mat, sorted_AOs, p_start_ind, system.m_mol);
     construct_T(T_mat, sorted_AOs, p_start_ind);
-
-    // construct_V_unsorted(V_mat, system.mAOs, system.m_mol);
-    // construct_T_unsorted(T_mat, system.mAOs);
-
-    
-    
     H_mat = T_mat + V_mat;
 
     // T_mat.print("Printing T mat ");
@@ -65,44 +59,6 @@ int eval_Hcoremat(Molecule_basis& system, arma::mat &H_mat){
     H_mat = H_mat(undo_sorted_indices, undo_sorted_indices);
 
     return 0;
-}
-
-
-size_t sort_AOs(std::vector<AO> &unsorted_AOs, std::vector<AO> &sorted_AOs, arma::uvec &sorted_indices){
-    // sorts AOs, s orbitals first then p orbitals next.
-    // input: unsorted_AOs
-    // output: sorted_AOs, sorted_indices
-    // returns: length of the s_orbs, which is also the first index of the p orbitals
-
-    std::vector<AO> s_orbs, p_orbs;
-    std::vector<size_t> s_orbs_ind, p_orbs_ind;
-    for (size_t mu = 0; mu < unsorted_AOs.size(); mu++){
-        int l_total = unsorted_AOs[mu].lmn(0) + unsorted_AOs[mu].lmn(1) + unsorted_AOs[mu].lmn(2);
-        if (l_total == 0){
-            s_orbs.push_back(unsorted_AOs[mu]);
-            s_orbs_ind.push_back(mu);
-        } else if (l_total == 1) {
-            p_orbs.push_back(unsorted_AOs[mu]);
-            p_orbs_ind.push_back(mu);
-        } else {
-            throw std::runtime_error("Unsupported l_total");
-        }
-    }
-    assert(s_orbs.size() + p_orbs.size() == unsorted_AOs.size());
-    s_orbs.insert(s_orbs.end(), p_orbs.begin(), p_orbs.end()); // append p_orbs to s_orbs
-    s_orbs_ind.insert(s_orbs_ind.end(), p_orbs_ind.begin(), p_orbs_ind.end());
-    
-    sorted_AOs = s_orbs;
-    //convert s_orbs_ind to sorted_indices
-    sorted_indices.set_size(s_orbs_ind.size());
-    for (size_t mu = 0; mu < s_orbs_ind.size(); mu++){
-        sorted_indices(mu) = s_orbs_ind[mu];
-    }
-    
-    
-    
-
-    return s_orbs.size();
 }
 
 void construct_S(arma::mat &Smat, std::vector<AO> &mAOs, size_t p_start_ind){
@@ -167,12 +123,6 @@ void construct_V(arma::mat &Vmat, std::vector<AO> &mAOs, size_t p_start_ind, con
 
 }
 void construct_T(arma::mat &Tmat, std::vector<AO> &mAOs, size_t p_start_ind){
-    // for (size_t mu = 0; mu < Tmat.n_rows; mu++){
-    //     for (size_t nu = 0; nu < Tmat.n_cols; nu++){
-    //         Tmat(mu,nu) = eval_Tmunu(mAOs[mu], mAOs[nu]);
-    //     }
-    // }
-
     // Handle ss, then sp, then pp.
     // Might be inefficient for small s_orbs.size() and p_orbs.size()
     

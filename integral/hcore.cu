@@ -26,9 +26,9 @@ int eval_OVmat(Molecule_basisGPU& system, double * S_mat_gpu){
     // We will calculate the whole S matrix block by block
     // If The AO is sorted, this will it more possible that each (mu|nu) block have same kind of mu, nu
 	dim3 blockDim(OneDemension_threadsPerBlock, OneDemension_threadsPerBlock); // OneDemension_threadsPerBlock^2 threads per block
-	int numblocks_1d = (nbsf + OneDemension_threadsPerBlock - 1) / OneDemension_threadsPerBlock;
+    dim3 gridDim((nbsf + blockDim.x - 1) / blockDim.x, (nbsf + blockDim.y - 1) / blockDim.y);
 
-    construct_S_whole_mat<<<numblocks_1d * numblocks_1d, blockDim>>>(S_mat_gpu, system.mAOs, nbsf);
+    construct_S_whole_mat<<<gridDim, blockDim>>>(S_mat_gpu, system.mAOs, nbsf);
     
     return 0;
 }
@@ -39,13 +39,13 @@ int eval_Hcoremat(Molecule_basisGPU& system, double * H_mat_gpu){
     // We will calculate the whole S matrix block by block
     // If The AO is sorted, this will it more possible that each (mu|H|nu) block have same kind of mu, nu
 	dim3 blockDim(OneDemension_threadsPerBlock, OneDemension_threadsPerBlock); // OneDemension_threadsPerBlock^2 threads per block
-	int numblocks_1d = (nbsf + OneDemension_threadsPerBlock - 1) / OneDemension_threadsPerBlock;
+    dim3 gridDim((nbsf + blockDim.x - 1) / blockDim.x, (nbsf + blockDim.y - 1) / blockDim.y);
 
     // Set Hmat to zero
     cudaMemset(H_mat_gpu, 0, nbsf * nbsf * sizeof(double));
 
     //Construct Tmat and added to Hmat (Not overwriting!!!)
-    construct_T<<<numblocks_1d * numblocks_1d, blockDim>>>(H_mat_gpu, system.mAOs, nbsf);
+    construct_T<<<gridDim, blockDim>>>(H_mat_gpu, system.mAOs, nbsf);
     cudaError_t cudaStatus = cudaGetLastError();
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "construct_T launch failed: %s\n", cudaGetErrorString(cudaStatus));
@@ -53,7 +53,7 @@ int eval_Hcoremat(Molecule_basisGPU& system, double * H_mat_gpu){
     }
 
     // Construct Vmat and added to Hmat (Not overwriting!!!)
-    construct_V<<<numblocks_1d * numblocks_1d, blockDim>>>(H_mat_gpu, system.mAOs, nbsf, system.Atom_coords, system.effective_charges, system.num_atom);
+    construct_V<<<gridDim, blockDim>>>(H_mat_gpu, system.mAOs, nbsf, system.Atom_coords, system.effective_charges, system.num_atom);
     cudaStatus = cudaGetLastError();
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "construct_V launch failed: %s\n", cudaGetErrorString(cudaStatus));
@@ -66,10 +66,9 @@ int eval_Hcoremat(Molecule_basisGPU& system, double * H_mat_gpu){
 
 __global__ void construct_S_whole_mat(double* Smat,  AOGPU* mAOs, size_t nbsf){
     
-	int numblocks_1d = (nbsf + OneDemension_threadsPerBlock - 1) / OneDemension_threadsPerBlock;
-    // blockIdx.x indicates which (mu|nu) block we are calculating
-    size_t mu = threadIdx.x + (blockIdx.x / numblocks_1d) * blockDim.x;
-    size_t nu = threadIdx.y + (blockIdx.x % numblocks_1d) * blockDim.y;
+	int mu = blockIdx.x * blockDim.x + threadIdx.x;
+	int nu = blockIdx.y * blockDim.y + threadIdx.y;
+
     if (mu >= nbsf || nu >= nbsf) return;
     int index = mu + nu * nbsf;
     
@@ -77,10 +76,8 @@ __global__ void construct_S_whole_mat(double* Smat,  AOGPU* mAOs, size_t nbsf){
 }
 
 __global__ void construct_T(double* Tmat, AOGPU* mAOs, size_t nbsf){
-	int numblocks_1d = (nbsf + OneDemension_threadsPerBlock - 1) / OneDemension_threadsPerBlock;
-    // blockIdx.x indicates which (mu|nu) block we are calculating
-    size_t mu = threadIdx.x + (blockIdx.x / numblocks_1d) * blockDim.x;
-    size_t nu = threadIdx.y + (blockIdx.x % numblocks_1d) * blockDim.y;
+	int mu = blockIdx.x * blockDim.x + threadIdx.x;
+	int nu = blockIdx.y * blockDim.y + threadIdx.y;
     if (mu >= nbsf || nu >= nbsf) return;
     int index = mu + nu * nbsf;
 
@@ -89,10 +86,8 @@ __global__ void construct_T(double* Tmat, AOGPU* mAOs, size_t nbsf){
 }
 
 __global__ void construct_V(double* Vmat, AOGPU* mAOs, size_t nbsf, double* Atom_coords, const int* effective_charges, const int num_atom){
-	int numblocks_1d = (nbsf + OneDemension_threadsPerBlock - 1) / OneDemension_threadsPerBlock;
-    // blockIdx.x indicates which (mu|nu) block we are calculating
-    size_t mu = threadIdx.x + (blockIdx.x / numblocks_1d) * blockDim.x;
-    size_t nu = threadIdx.y + (blockIdx.x % numblocks_1d) * blockDim.y;
+	int mu = blockIdx.x * blockDim.x + threadIdx.x;
+	int nu = blockIdx.y * blockDim.y + threadIdx.y;
     if (mu >= nbsf || nu >= nbsf) return;
     int index = mu + nu * nbsf;
 

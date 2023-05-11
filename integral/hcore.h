@@ -9,7 +9,6 @@
 int eval_Hcoremat(Molecule_basis& system, arma::mat &H_mat);
 int eval_OVmat(Molecule_basis& system, arma::mat &S_mat);
 
-size_t sort_AOs(std::vector<AO> &unsorted_AOs, std::vector<AO> &sorted_AOs, arma::uvec &sorted_indices);
 void construct_S(arma::mat &Smat, std::vector<AO> &mAOs, size_t p_start_ind);
 void construct_V(arma::mat &Vmat, std::vector<AO> &mAOs, size_t p_start_ind, const Molecule &mol);
 void construct_T(arma::mat &Tmat, std::vector<AO> &mAOs, size_t p_start_ind);

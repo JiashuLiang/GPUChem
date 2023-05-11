@@ -3,9 +3,6 @@
 #include <armadillo>
 #include <cmath>
 
-// calculates (i j | k l), each of those is a CGTO basis function
-// sorry using i j k l here instead of mu nu si la
-double eval_2eint(arma::mat &rys_root, AO &AO_i, AO &AO_j, AO &AO_k, AO &AO_l);
 
 // rys roots and weights interpolation from the text file
 void rysroot(arma::mat &rys_root, double &X, double &t1, double &t2, double &t3, double &w1, double &w2, double &w3);
@@ -19,6 +16,7 @@ double Ix_calc_ppss(double &t2, double &xi, double &xj, double &xk, double &xl, 
 double Ix_calc_psps(double &t2, double &xi, double &xj, double &xk, double &xl, double &ai, double &aj, double &ak, double &al);
 double Ix_calc_ppps(double &t2, double &xi, double &xj, double &xk, double &xl, double &ai, double &aj, double &ak, double &al);
 double Ix_calc_pppp(double &t2, double &xi, double &xj, double &xk, double &xl, double &ai, double &aj, double &ak, double &al);
+
 
 int eval_Gmat_RSCF(Molecule_basis &system, arma::mat &rys_root, arma::mat &Schwarz_mat, double schwarz_tol, arma::mat &Pa_mat, arma::mat &G_mat)
 {
@@ -116,7 +114,8 @@ int eval_JKmat_RSCF(std::vector<AO> &mAOs, arma::mat &rys_root, arma::mat &Schwa
 					arma::mat &Pa_mat, arma::mat &J_mat, arma::mat &K_mat)
 {
 	// J_{mu nu} = \sum_{si,la}(mu nu | si la) P_{si la}
-	// K_{mu la} = \sum_{si,nu}(mu nu | si la) P_{si nu}
+	// K_{mu nu} = \sum_{si,la}(mu la | si nu) P_{si la}
+	// ==> K_{mu la} = \sum_{si,nu}(mu nu | si la) P_{si nu}
 	int nbasis = mAOs.size();
 	double schwarz_tol_sq = schwarz_tol * schwarz_tol;
 	double schwarz_max = Schwarz_mat.max();
@@ -147,7 +146,7 @@ int eval_JKmat_RSCF(std::vector<AO> &mAOs, arma::mat &rys_root, arma::mat &Schwa
 						else
 							Jmunu += 2 * munusila * Pa_mat(si, la);
 							
-						// for K matrix
+						// for K matrix, use symmetry to save 3/4 of the time
 						K_mat(mu, la) += munusila * Pa_mat(si, nu);
 						if(mu != nu)
 							K_mat(nu, la) += munusila * Pa_mat(si, mu);
@@ -211,8 +210,7 @@ int eval_Jmat_RSCF(Molecule_basis &system, arma::mat &rys_root, arma::mat &Schwa
 
 int eval_Kmat_RSCF(Molecule_basis &system, arma::mat &rys_root, arma::mat &Schwarz_mat, double schwarz_tol, arma::mat &Pa_mat, arma::mat &K_mat)
 {
-	// F = H + G, G is the two-electron part of the Fock matrix
-	// G_{mu nu} = \sum_{si,la}[2(mu nu | si la) - (mu la | si nu)] P_{si la}
+	// K_{mu nu} = \sum_{si,la}(mu la | si nu) P_{si la}
 
 	int nbasis = system.mAOs.size();
 	// arma::mat rys_root;

@@ -61,7 +61,7 @@ int HartreeFock_Rys_gpu::init()
     Schwarz_mat_dim0 = dim;
     Schwarz_mat_dim1 = dim;
     rys_root_dim0 = rys_root_arma.n_cols;
-    rys_root_dim1 = rys_root_arma.n_rows;
+    rys_root_dim1 = rys_root_arma.n_rows; // the size of inner dimension (fast dimension)
 
     // Allocate memory on GPU for rys_root and Schwarz_mat
     cudaMalloc((void **)&rys_root, sizeof(double) * rys_root_arma.n_elem);
@@ -76,10 +76,6 @@ int HartreeFock_Rys_gpu::init()
     dim3 gridDim((dim + blockDim.x - 1) / blockDim.x, (dim + blockDim.y - 1) / blockDim.y);
     // call the kernel
     eval_Schwarzmat_GPU<<<gridDim, blockDim>>>(m_molbasis_gpu.mAOs, rys_root, Schwarz_mat, dim, rys_root_dim1);
-
-
-
-
     return 0;
 }
 
