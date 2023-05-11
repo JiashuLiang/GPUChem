@@ -85,8 +85,16 @@ int HartreeFock_Rys_gpu::init()
 
 int HartreeFock_Rys_gpu::eval_OV(arma::mat &OV_mat)
 {
-    int ok = eval_OVmat_without_sort_inside(m_molbasis_gpu, OV_mat);
-    // int ok =  eval_OVmat(m_molbasis_gpu, m_molbasis, OV_mat);
+    // // The unused function eval_OVmat_sort_inside calculations as ss, sp, ps, pp blocks
+    // int ok =  eval_OVmat_sort_inside(m_molbasis_gpu, m_molbasis, OV_mat);
+
+    double *S_mat_gpu;
+    cudaMalloc((void**)&S_mat_gpu, OV_mat.n_elem* sizeof(double));
+
+    int ok = eval_OVmat(m_molbasis_gpu, S_mat_gpu);
+    cudaMemcpy(OV_mat.memptr(), S_mat_gpu, OV_mat.n_elem * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaFree(S_mat_gpu);
+
     if (sort_AO)
         OV_mat = OV_mat(m_molbasis.mAOs_sorted_index_inv, m_molbasis.mAOs_sorted_index_inv);
 
@@ -96,9 +104,17 @@ int HartreeFock_Rys_gpu::eval_OV(arma::mat &OV_mat)
 int HartreeFock_Rys_gpu::eval_Hcore(arma::mat &H_mat)
 {
     H_mat.zeros();
+    // // The unused function eval_Hcoremat_sort_inside calculations as ss, sp, ps, pp blocks
+    // int ok = eval_Hcoremat_sort_inside(m_molbasis_gpu, m_molbasis, H_mat);
+
+    double *H_mat_gpu;
+    cudaMalloc((void**)&H_mat_gpu, H_mat.n_elem * sizeof(double));
+
     // evaluate the H core matrix (one-electron part)
-    int ok = eval_Hcoremat_without_sort_inside(m_molbasis_gpu, H_mat);
-    // int ok = eval_Hcoremat(m_molbasis_gpu, m_molbasis, H_mat);
+    int ok = eval_Hcoremat(m_molbasis_gpu, H_mat_gpu);
+    cudaMemcpy(H_mat.memptr(), H_mat_gpu, H_mat.n_elem * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaFree(H_mat_gpu);
+    
     if (sort_AO)
         H_mat = H_mat(m_molbasis.mAOs_sorted_index_inv, m_molbasis.mAOs_sorted_index_inv);
     
